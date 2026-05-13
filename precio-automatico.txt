@@ -1,0 +1,26 @@
+
+-PEDIDO NACHO #0001
+Manejo de precios automáticos de los productos que manejan. Ellos actualmente manejan una lista de precios en excel,
+que lo actualizan a mano, que se manejan con 4 proveedores. Lo ideal sería que el sistema se conecte a los proveedores,
+y actualice los precios automáticamente, para no tener que estar actualizando a mano.
+Separar tipo de sistemas dentro de obras (extincion, deteccion y sala de bombas)
+Tambien necesitan que les traiga el precio dolar. (banco nacional argentina BNA, precio venta)
+API: https://dolarapi.com/v1/dolares/oficial
+
+
+En un futuro quieren poder hacer los presupuestos automaticamnete, seleccionando los productos que quieren,
+la cantidad y el sistema les arme el presupuesto, con los precios actualizados, infomración del producto y la foto.
+Esto es algo que se puede hacera futuro, pero lo ideal sería primero tener el tema de los precios automáticos
+funcionando, para luego poder hacer los presupuestos automáticos.
+
+
+FLUJO DIAGRAMA
+1. Subo Excel proveedor
+2. Parseo archivo
+3. Busco producto_proveedor
+4. Si existe:
+      actualizo precio
+   Si no existe:
+      creo producto_proveedor pendiente
+5. Guardo historial
+

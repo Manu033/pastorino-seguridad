@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TipoFuente {
+  EXCEL
+  PDF
+  API
+  MANUAL
+}
+
+enum Moneda {
+  ARS
+  USD
+}
+
+model Proveedor {
+  id                  Int                 @id @default(autoincrement())
+  nombre              String              @unique @db.VarChar(150)
+  email_contacto      String?             @db.VarChar(255)
+  telefono            String?             @db.VarChar(80)
+  tipo_fuente         TipoFuente
+  activo              Boolean             @default(true)
+  productos_proveedor ProductoProveedor[]
+
+  @@map("proveedores")
+}
+
+model Categoria {
+  id            Int            @id @default(autoincrement())
+  nombre        String         @unique @db.VarChar(120)
+  subcategorias Subcategoria[]
+  productos     Producto[]
+
+  @@map("categorias")
+}
+
+model Subcategoria {
+  id           Int        @id @default(autoincrement())
+  id_categoria Int
+  nombre       String     @db.VarChar(120)
+  categoria    Categoria  @relation(fields: [id_categoria], references: [id])
+  productos    Producto[]
+
+  @@unique([id_categoria, nombre], name: "uq_subcategorias_categoria_nombre")
+  @@index([id_categoria])
+  @@map("subcategorias")
+}
+
+model Producto {
+  id                  Int                 @id @default(autoincrement())
+  sku_interno         String              @unique @db.VarChar(80)
+  nombre_normalizado  String              @db.VarChar(255)
+  id_categoria        Int
+  id_subcategoria     Int?
+  marca               String?             @db.VarChar(120)
+  modelo              String?             @db.VarChar(120)
+  descripcion         String?
+  imagen_url          String?             @db.VarChar(500)
+  activo              Boolean             @default(true)
+  categoria           Categoria           @relation(fields: [id_categoria], references: [id])
+  subcategoria        Subcategoria?       @relation(fields: [id_subcategoria], references: [id])
+  productos_proveedor ProductoProveedor[]
+
+  @@index([nombre_normalizado])
+  @@index([id_categoria])
+  @@index([id_subcategoria])
+  @@map("productos")
+}
+
+model ProductoProveedor {
+  id                         Int               @id @default(autoincrement())
+  id_proveedor               Int
+  id_producto                Int?
+  sku_producto_proveedor     String            @db.VarChar(120)
+  nombre_producto_proveedor  String            @db.VarChar(255)
+  marca_producto_proveedor   String?           @db.VarChar(120)
+  modelo_producto_proveedor  String?           @db.VarChar(120)
+  unidad                     String?           @db.VarChar(40)
+  precio_actual              Decimal?          @db.Decimal(14, 4)
+  moneda_actual              Moneda?
+  fecha_precio_actualizada   DateTime?
+  activo                     Boolean           @default(true)
+  proveedor                  Proveedor         @relation(fields: [id_proveedor], references: [id])
+  producto                   Producto?         @relation(fields: [id_producto], references: [id])
+  historial_precios          HistorialPrecio[]
+
+  @@unique([id_proveedor, sku_producto_proveedor], name: "uq_productos_proveedor_proveedor_sku")
+  @@index([id_proveedor])
+  @@index([id_producto])
+  @@index([sku_producto_proveedor])
+  @@map("productos_proveedor")
+}
+
+model HistorialPrecio {
+  id                    Int               @id @default(autoincrement())
+  id_producto_proveedor Int
+  precio                Decimal           @db.Decimal(14, 4)
+  moneda                Moneda
+  fecha_actualizada     DateTime          @default(now())
+  producto_proveedor    ProductoProveedor @relation(fields: [id_producto_proveedor], references: [id], onDelete: Cascade)
+
+  @@index([id_producto_proveedor])
+  @@index([fecha_actualizada])
+  @@map("historial_precios")
+}

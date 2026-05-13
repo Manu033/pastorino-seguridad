@@ -1,0 +1,50 @@
+Analizá el archivo adjunto y Extraé TODOS los productos de TODAS las páginas del archivo. No devuelvas ejemplos ni una muestra parcial. El array JSON final debe contener un objeto por cada fila de producto detectada.
+
+Necesito que devuelvas exclusivamente un JSON válido con un array de productos.
+
+Cada producto debe tener exactamente esta estructura:
+
+```json
+{
+  "sku_producto_proveedor": "17002",
+  "nombre_producto_proveedor": "Tubo CC Iram 2502 21.3x2.00mm",
+  "marca_producto_proveedor": null,
+  "modelo_producto_proveedor": null,
+  "unidad": "mts",
+  "moneda": "USD",
+  "precio": 1.68
+}
+```
+
+Reglas importantes:
+
+* Si un campo no existe o no puede determinarse claramente, devolver null.
+* No inventar información.
+* El campo "precio" debe ser numérico.
+* El campo "moneda" debe normalizarse únicamente como:
+
+  * "ARS"
+  * "USD"
+* El campo "unidad" debe extraerse si existe (ejemplo: mts, unid, kg, etc).
+* El resultado final debe ser únicamente un JSON válido.
+* No agregar explicaciones.
+* No agregar texto fuera del JSON.
+* Ignorar encabezados, subtítulos, observaciones y texto no relacionado a productos.
+* Detectar correctamente tablas aunque el archivo sea PDF o tenga formato irregular.
+* Cada fila de producto debe convertirse en un objeto independiente dentro del array JSON.
+
+Formato esperado final:
+
+```json
+[
+  {
+    "sku_producto_proveedor": "17002",
+    "nombre_producto_proveedor": "Tubo CC Iram 2502 21.3x2.00mm",
+    "marca_producto_proveedor": null,
+    "modelo_producto_proveedor": null,
+    "unidad": "mts",
+    "moneda": "USD",
+    "precio": 1.68
+  }
+]
+```

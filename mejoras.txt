@@ -1,0 +1,12 @@
+Acá vamos a anotar las mejoras que se pueden hacer al proyecto, para tenerlas a mano y no olvidarlas. 
+http://pastorinoseguridad.ddns.net/psg/backend
+
+- Activar HTTPS valido, redirigir HTTP a HTTPS y habilitar HSTS.
+- Marcar cookies como Secure, HttpOnly y SameSite.
+- Ocultar cabeceras Server, X-AspNetMvc-Version, X-AspNet-Version y X-Powered-By.
+- Agregar cabeceras de seguridad: CSP, nosniff, Referrer-Policy y Permissions-Policy.
+- Actualizar librerias JavaScript y eliminar duplicados.
+
+
+
+

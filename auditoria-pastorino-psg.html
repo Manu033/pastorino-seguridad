@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auditoria de Seguridad - PSG Backend</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --ink: #1f2937;
+      --muted: #5f6b7a;
+      --line: #d9e0ea;
+      --critical: #b42318;
+      --high: #b54708;
+      --medium: #175cd3;
+      --ok: #067647;
+      --dark: #111827;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.55;
+    }
+
+    header {
+      background: #13233f;
+      color: #fff;
+      padding: 36px 24px;
+      border-bottom: 5px solid #2f80ed;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.2;
+    }
+
+    h1 {
+      font-size: 30px;
+      margin-bottom: 10px;
+    }
+
+    h2 {
+      font-size: 22px;
+      margin-bottom: 14px;
+    }
+
+    h3 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    code {
+      background: #eef2f7;
+      border: 1px solid #d8dee9;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.95em;
+    }
+
+    .subtitle {
+      color: #d7e3f8;
+      max-width: 900px;
+      margin: 0;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .meta div,
+    section,
+    .finding,
+    .summary-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+    }
+
+    .meta div {
+      padding: 14px;
+      color: var(--ink);
+    }
+
+    .meta span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+    }
+
+    section {
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .summary-card {
+      padding: 16px;
+      min-height: 112px;
+    }
+
+    .summary-card strong {
+      display: block;
+      font-size: 30px;
+      margin-bottom: 4px;
+    }
+
+    .summary-card span {
+      color: var(--muted);
+    }
+
+    .finding {
+      padding: 18px;
+      margin: 14px 0;
+      border-left-width: 6px;
+    }
+
+    .finding.critical {
+      border-left-color: var(--critical);
+    }
+
+    .finding.high {
+      border-left-color: var(--high);
+    }
+
+    .finding.medium {
+      border-left-color: var(--medium);
+    }
+
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 0.03em;
+      padding: 4px 9px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .critical .badge {
+      background: var(--critical);
+    }
+
+    .high .badge {
+      background: var(--high);
+    }
+
+    .medium .badge {
+      background: var(--medium);
+    }
+
+    .evidence {
+      background: #fbfcfe;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 12px;
+    }
+
+    .evidence strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    ul,
+    ol {
+      margin-top: 8px;
+      padding-left: 22px;
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eef3fb;
+    }
+
+    .note {
+      border-left: 5px solid var(--ok);
+      background: #f0fdf4;
+      padding: 14px;
+      border-radius: 6px;
+      margin-top: 12px;
+    }
+
+    footer {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 12px 0 26px;
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .meta,
+      .grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 620px) {
+      header,
+      main {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .meta,
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Auditoria de Seguridad - PSG Backend</h1>
+    <p class="subtitle">Revision no destructiva del sitio <strong>http://pastorinoseguridad.ddns.net/psg/backend</strong>, con validacion de login, cabeceras HTTP, controles de acceso y exposicion de informacion.</p>
+    <div class="meta">
+      <div><span>Fecha</span>12/05/2026</div>
+      <div><span>Modalidad</span>No destructiva</div>
+      <div><span>IP resuelta</span>179.43.125.22</div>
+      <div><span>Alcance</span>Aplicacion web PSG Backend</div>
+    </div>
+  </header>
+
+  <main>
+    <div class="grid">
+      <div class="summary-card">
+        <strong>3</strong>
+        <span>Hallazgos criticos</span>
+      </div>
+      <div class="summary-card">
+        <strong>3</strong>
+        <span>Hallazgos altos</span>
+      </div>
+      <div class="summary-card">
+        <strong>2</strong>
+        <span>Hallazgos medios</span>
+      </div>
+      <div class="summary-card">
+        <strong>1</strong>
+        <span>Accion inmediata: activar HTTPS</span>
+      </div>
+    </div>
+
+    <section>
+      <h2>Resumen Ejecutivo</h2>
+      <p>La aplicacion presenta riesgos relevantes para confidencialidad, control de acceso y exposicion de infraestructura. El problema mas urgente es que el login opera por HTTP plano: credenciales y cookies pueden ser interceptadas en transito. Tambien se confirmo acceso sin autenticacion a pantallas internas sensibles, incluyendo permisos y estado de sincronizacion.</p>
+      <p>La prioridad debe ser bloquear el acceso anonimo a controladores internos, habilitar HTTPS valido, endurecer cookies y retirar cabeceras que revelan versiones del stack.</p>
+      <div class="note">
+        No se realizaron pruebas destructivas, fuerza bruta, explotacion activa ni cambios de datos.
+      </div>
+    </section>
+
+    <section>
+      <h2>Hallazgos Criticos</h2>
+
+      <article class="finding critical">
+        <span class="badge">Critico</span>
+        <h3>Login y sesion transmitidos por HTTP plano</h3>
+        <p>El sitio responde por <code>http://</code> y la conexion HTTPS en el puerto 443 resetea la conexion. Esto expone usuario, contrasena y cookies de sesion a captura en redes intermedias.</p>
+        <div class="evidence">
+          <strong>Evidencia</strong>
+          <ul>
+            <li><code>http://pastorinoseguridad.ddns.net/psg/backend</code> devuelve <code>200 OK</code>.</li>
+            <li><code>https://pastorinoseguridad.ddns.net/psg/backend</code> falla con reset de conexion.</li>
+            <li>Cookies observadas: <code>ASP.NET_SessionId</code>, <code>__RequestVerificationToken...</code> y <code>.ASPXAUTH</code> sin atributo <code>Secure</code>.</li>
+          </ul>
+        </div>
+        <p><strong>Remediacion:</strong> instalar certificado TLS valido, forzar redireccion HTTP a HTTPS, activar HSTS y marcar cookies como <code>Secure</code>, <code>HttpOnly</code> y <code>SameSite=Lax</code> o <code>Strict</code>.</p>
+      </article>
+
+      <article class="finding critical">
+        <span class="badge">Critico</span>
+        <h3>Rutas internas accesibles sin autenticacion</h3>
+        <p>Se confirmaron paginas internas que responden <code>200 OK</code> sin sesion autenticada. Esto permite ver pantallas de administracion y configuracion desde internet.</p>
+        <div class="evidence">
+          <strong>Evidencia</strong>
+          <ul>
+            <li><code>/psg/backend/MenusRoles/Index</code> devuelve <code>200 OK</code> sin cookie de autenticacion y muestra la pantalla <code>PSG - Permisos</code>.</li>
+            <li><code>/psg/backend/Sistema/ControlSincroNube</code> devuelve <code>200 OK</code> sin cookie de autenticacion y muestra <code>PSG - Control SyncData</code>.</li>
+            <li>La pantalla de permisos expone roles como <code>Administrador</code>, <code>Cobranzas</code>, <code>Ventas</code>, <code>RRHH - Personal</code> y endpoints JavaScript como <code>/menusroles/GuardarRol</code> y <code>/menusroles/EliminarRol</code>.</li>
+          </ul>
+        </div>
+        <p><strong>Remediacion:</strong> aplicar autorizacion por defecto a nivel global o controlador, por ejemplo <code>[Authorize]</code> en ASP.NET MVC, y dejar anonimo solo el login y recursos publicos estrictamente necesarios.</p>
+      </article>
+
+      <article class="finding critical">
+        <span class="badge">Critico</span>
+        <h3>Credencial debil y expuesta</h3>
+        <p>La credencial provista para la auditoria es simple y fue compartida en texto claro. Debe considerarse comprometida.</p>
+        <div class="evidence">
+          <strong>Evidencia</strong>
+          <ul>
+            <li>El login con el usuario provisto emitio cookie <code>.ASPXAUTH</code> y redirigio a <code>/psg/backend/Home/Index</code>.</li>
+            <li>La contrasena tiene baja complejidad y no debe mantenerse activa.</li>
+          </ul>
+        </div>
+        <p><strong>Remediacion:</strong> cambiar la contrasena inmediatamente, invalidar sesiones activas, revisar accesos recientes y aplicar politica de contrasenas robusta con MFA si el sistema lo permite.</p>
+      </article>
+    </section>
+
+    <section>
+      <h2>Hallazgos Altos</h2>
+
+      <article class="finding high">
+        <span class="badge">Alto</span>
+        <h3>Divulgacion de tecnologia y versiones</h3>
+        <p>El servidor publica cabeceras que identifican plataforma y versiones, lo que facilita busqueda de vulnerabilidades especificas.</p>
+        <div class="evidence">
+          <strong>Cabeceras observadas</strong>
+          <ul>
+            <li><code>Server: Microsoft-IIS/8.5</code></li>
+            <li><code>X-AspNetMvc-Version: 5.2</code></li>
+            <li><code>X-AspNet-Version: 4.0.30319</code></li>
+            <li><code>X-Powered-By: ASP.NET</code></li>
+          </ul>
+        </div>
+        <p><strong>Remediacion:</strong> remover cabeceras de version desde IIS y configuracion ASP.NET. Mantener sistema operativo, IIS, .NET Framework y dependencias actualizadas.</p>
+      </article>
+
+      <article class="finding high">
+        <span class="badge">Alto</span>
+        <h3>Error 500 accesible sin sesion</h3>
+        <p>La ruta <code>/psg/backend/Account/Manage</code> devuelve <code>500 Internal Server Error</code> sin autenticacion. Esto sugiere validacion insuficiente de sesion o manejo incompleto de errores.</p>
+        <div class="evidence">
+          <strong>Evidencia</strong>
+          <ul>
+            <li><code>GET /psg/backend/Account/Manage</code> sin sesion devuelve <code>500 Internal Server Error</code>.</li>
+            <li>La respuesta renderiza el layout interno antes del mensaje de error.</li>
+          </ul>
+        </div>
+        <p><strong>Remediacion:</strong> validar autenticacion antes de ejecutar la accion, devolver <code>302</code> al login o <code>401/403</code>, y registrar el error sin exponer layout interno.</p>
+      </article>
+
+      <article class="finding high">
+        <span class="badge">Alto</span>
+        <h3>Cabeceras de seguridad incompletas</h3>
+        <p>La aplicacion no devuelve varias cabeceras de endurecimiento habituales. Esto aumenta la exposicion ante XSS, clickjacking parcial, MIME sniffing y filtrado de informacion.</p>
+        <div class="evidence">
+          <strong>Faltantes recomendados</strong>
+          <ul>
+            <li><code>Content-Security-Policy</code></li>
+            <li><code>X-Content-Type-Options: nosniff</code></li>
+            <li><code>Referrer-Policy</code></li>
+            <li><code>Permissions-Policy</code></li>
+            <li><code>Strict-Transport-Security</code>, una vez activo HTTPS</li>
+          </ul>
+        </div>
+        <p><strong>Remediacion:</strong> definir politica CSP compatible con la aplicacion, agregar cabeceras desde IIS/web.config y revisar efectos en QA antes de publicar.</p>
+      </article>
+    </section>
+
+    <section>
+      <h2>Hallazgos Medios</h2>
+
+      <article class="finding medium">
+        <span class="badge">Medio</span>
+        <h3>Librerias JavaScript antiguas y duplicadas</h3>
+        <p>Se observaron multiples versiones de jQuery cargadas en paginas internas, incluyendo versiones antiguas con historial de vulnerabilidades conocidas.</p>
+        <div class="evidence">
+          <strong>Evidencia</strong>
+          <ul>
+            <li><code>jQuery v1.9.1</code> en <code>/Content/flatty/assets/javascripts/jquery/jquery.min.js</code>.</li>
+            <li><code>jQuery v3.3.1</code> en <code>/Content/custom/js/jquery-3.3.1.js</code>.</li>
+          </ul>
+        </div>
+        <p><strong>Remediacion:</strong> unificar version de jQuery, actualizar plugins dependientes y retirar librerias demo o no utilizadas.</p>
+      </article>
+
+      <article class="finding medium">
+        <span class="badge">Medio</span>
+        <h3>Metodos HTTP no restringidos</h3>
+        <p>El servidor responde <code>200 OK</code> para <code>OPTIONS</code> y <code>TRACE</code>. Aunque no se observo eco clasico de TRACE en la prueba directa, conviene reducir la superficie expuesta.</p>
+        <div class="evidence">
+          <strong>Evidencia</strong>
+          <ul>
+            <li><code>OPTIONS</code> respondio <code>200 OK</code>.</li>
+            <li><code>TRACE</code> respondio <code>200 OK</code>.</li>
+          </ul>
+        </div>
+        <p><strong>Remediacion:</strong> bloquear metodos no usados desde IIS y permitir solo <code>GET</code>, <code>POST</code> y <code>HEAD</code> donde corresponda.</p>
+      </article>
+    </section>
+
+    <section>
+      <h2>Evidencia Tecnica Resumida</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Prueba</th>
+            <th>Resultado</th>
+            <th>Riesgo</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>DNS</td>
+            <td><code>pastorinoseguridad.ddns.net</code> resuelve a <code>179.43.125.22</code>.</td>
+            <td>Exposicion publica del backend.</td>
+          </tr>
+          <tr>
+            <td>HTTP</td>
+            <td><code>GET /psg/backend</code> devuelve <code>200 OK</code>.</td>
+            <td>Login disponible sin cifrado.</td>
+          </tr>
+          <tr>
+            <td>HTTPS</td>
+            <td>Conexion al puerto 443 reseteada.</td>
+            <td>No hay canal seguro funcional.</td>
+          </tr>
+          <tr>
+            <td>Login</td>
+            <td>Credenciales provistas redirigen a <code>/Home/Index</code> y emiten <code>.ASPXAUTH</code>.</td>
+            <td>Sesion autenticada sin cookie <code>Secure</code>.</td>
+          </tr>
+          <tr>
+            <td>Acceso anonimo</td>
+            <td><code>/MenusRoles/Index</code> y <code>/Sistema/ControlSincroNube</code> devuelven <code>200 OK</code> sin sesion.</td>
+            <td>Falla de autorizacion.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Plan de Remediacion Priorizado</h2>
+      <ol>
+        <li>Activar HTTPS valido, redirigir HTTP a HTTPS y habilitar HSTS.</li>
+        <li>Cambiar la contrasena auditada, invalidar sesiones y revisar logs de acceso.</li>
+        <li>Aplicar autenticacion obligatoria por defecto en controladores internos.</li>
+        <li>Corregir especificamente el acceso anonimo a <code>MenusRoles</code> y <code>Sistema/ControlSincroNube</code>.</li>
+        <li>Marcar cookies como <code>Secure</code>, <code>HttpOnly</code> y <code>SameSite</code>.</li>
+        <li>Ocultar cabeceras <code>Server</code>, <code>X-AspNetMvc-Version</code>, <code>X-AspNet-Version</code> y <code>X-Powered-By</code>.</li>
+        <li>Agregar cabeceras de seguridad: CSP, nosniff, Referrer-Policy y Permissions-Policy.</li>
+        <li>Actualizar librerias JavaScript y eliminar duplicados.</li>
+        <li>Bloquear metodos HTTP no necesarios.</li>
+        <li>Repetir prueba no destructiva luego de aplicar cambios.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Limitaciones</h2>
+      <ul>
+        <li>No se ejecuto fuerza bruta, fuzzing agresivo, explotacion activa ni modificacion de datos.</li>
+        <li>No se audito codigo fuente ni configuracion interna del servidor.</li>
+        <li>No se validaron endpoints POST sensibles para evitar cambios en produccion.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    Informe generado localmente para Pastorino Seguridad - PSG Backend.
+  </footer>
+</body>
+</html>
