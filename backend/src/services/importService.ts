@@ -63,21 +63,28 @@ export async function processImportacionJson(
             },
           });
 
+      const precioChanged =
+        !actual ||
+        String(actual.precio_actual ?? "") !== String(row.precio ?? "") ||
+        actual.moneda_actual !== row.moneda;
+
       if (actual) {
         productos_actualizados += productoChanged(actual, data) ? 1 : 0;
       } else {
         productos_creados += 1;
       }
 
-      await tx.historialPrecio.create({
-        data: {
-          id_producto_proveedor: producto.id,
-          precio: row.precio,
-          moneda: row.moneda,
-          fecha_actualizada: now,
-        },
-      });
-      precios_creados += 1;
+      if (precioChanged) {
+        await tx.historialPrecio.create({
+          data: {
+            id_producto_proveedor: producto.id,
+            precio: row.precio,
+            moneda: row.moneda,
+            fecha_actualizada: now,
+          },
+        });
+        precios_creados += 1;
+      }
     }
 
     return {

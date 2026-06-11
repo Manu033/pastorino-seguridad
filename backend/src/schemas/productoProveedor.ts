@@ -22,3 +22,9 @@ export const productoProveedorCreateSchema = z.object({
 });
 
 export const productoProveedorUpdateSchema = productoProveedorCreateSchema.partial();
+
+export const bulkCategorizarSchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1),
+  id_categoria: z.number().int().positive().nullable(),
+  id_subcategoria: z.number().int().positive().nullable(),
+});

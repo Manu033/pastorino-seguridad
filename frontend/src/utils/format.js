@@ -1,3 +1,12 @@
+export function normalizeSearch(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w]+/g, " ")
+    .trim();
+}
+
 export function toNumberOrNull(value) {
   if (value === "" || value === null || value === undefined) return null;
   return Number(value);

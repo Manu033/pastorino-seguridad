@@ -6,6 +6,7 @@ Last updated: 2026-06-11
 
 ## Sources scanned
 
+- C:\Users\carri\.agents\skills
 - C:\Users\carri\.claude\skills
 - C:\Users\carri\.cursor\skills
 - C:\Users\carri\.copilot\skills
@@ -25,6 +26,7 @@ Last updated: 2026-06-11
 | `chained-pr` | Trigger: PRs over 400 lines, stacked PRs, review slices. Split oversized changes into chained PRs that protect review focus. | user | `C:\Users\carri\.claude\skills\chained-pr\SKILL.md` |
 | `cognitive-doc-design` | Design docs that reduce cognitive load. Trigger: writing guides, READMEs, RFCs, onboarding, architecture, or review-facing docs. | user | `C:\Users\carri\.claude\skills\cognitive-doc-design\SKILL.md` |
 | `comment-writer` | Write warm, direct collaboration comments. Trigger: PR feedback, issue replies, reviews, Slack messages, or GitHub comments. | user | `C:\Users\carri\.claude\skills\comment-writer\SKILL.md` |
+| `find-skills` | Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill. | user | `C:\Users\carri\.agents\skills\find-skills\SKILL.md` |
 | `go-testing` | Trigger: Go tests, go test coverage, Bubbletea teatest, golden files. Apply focused Go testing patterns. | user | `C:\Users\carri\.claude\skills\go-testing\SKILL.md` |
 | `imagegen` | Generate or edit raster images when the task benefits from AI-created bitmap visuals such as photos, illustrations, textures, sprites, mockups, or transparent-background cutouts. Use when Codex should create a brand-new image, transform an existing image, or derive visual variants from references, and the output should be a bitmap asset rather than repo-native code or vector. Do not use when the task is better handled by editing existing SVG/vector/code-native assets, extending an established icon or logo system, or building the visual directly in HTML/CSS/canvas. | user | `C:\Users\carri\.codex\skills\.system\imagegen\SKILL.md` |
 | `issue-creation` | Create Gentle AI issues with issue-first checks. Trigger: creating GitHub issues, bug reports, or feature requests. | user | `C:\Users\carri\.claude\skills\issue-creation\SKILL.md` |

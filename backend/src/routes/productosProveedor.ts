@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db/prisma.js";
 import { asyncHandler, HttpError, parseId } from "../http.js";
 import {
+  bulkCategorizarSchema,
   productoProveedorCreateSchema,
   productoProveedorUpdateSchema,
 } from "../schemas/productoProveedor.js";
@@ -14,12 +15,13 @@ productosProveedorRouter.get(
     const id_proveedor = req.query.id_proveedor ? Number(req.query.id_proveedor) : undefined;
     const id_categoria = req.query.id_categoria ? Number(req.query.id_categoria) : undefined;
     const id_subcategoria = req.query.id_subcategoria ? Number(req.query.id_subcategoria) : undefined;
+    const sin_categoria = req.query.sin_categoria === "true";
     const buscar = typeof req.query.buscar === "string" ? req.query.buscar.trim() : "";
     const page = req.query.page ? Math.max(Number(req.query.page), 1) : undefined;
     const pageSize = req.query.pageSize ? Math.min(Math.max(Number(req.query.pageSize), 1), 200) : undefined;
     const where = {
       ...(id_proveedor ? { id_proveedor } : {}),
-      ...(id_categoria ? { id_categoria } : {}),
+      ...(sin_categoria ? { id_categoria: null } : id_categoria ? { id_categoria } : {}),
       ...(id_subcategoria ? { id_subcategoria } : {}),
       ...(buscar
         ? {
@@ -49,6 +51,19 @@ productosProveedorRouter.get(
 
     const productos = await prisma.productoProveedor.findMany(query);
     res.json(productos);
+  }),
+);
+
+productosProveedorRouter.patch(
+  "/bulk-categorizar",
+  asyncHandler(async (req, res) => {
+    const { ids, id_categoria, id_subcategoria } = bulkCategorizarSchema.parse(req.body);
+    await validateCategoriaSubcategoria({ id_categoria, id_subcategoria });
+    const result = await prisma.productoProveedor.updateMany({
+      where: { id: { in: ids } },
+      data: { id_categoria, id_subcategoria },
+    });
+    res.json({ updated: result.count });
   }),
 );
 
