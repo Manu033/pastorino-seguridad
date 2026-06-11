@@ -4,7 +4,6 @@ import { asyncHandler, HttpError, parseId } from "../http.js";
 import {
   productoProveedorCreateSchema,
   productoProveedorUpdateSchema,
-  vincularProductoSchema,
 } from "../schemas/productoProveedor.js";
 
 export const productosProveedorRouter = Router();
@@ -13,37 +12,42 @@ productosProveedorRouter.get(
   "",
   asyncHandler(async (req, res) => {
     const id_proveedor = req.query.id_proveedor ? Number(req.query.id_proveedor) : undefined;
-    const id_producto = req.query.id_producto ? Number(req.query.id_producto) : undefined;
+    const id_categoria = req.query.id_categoria ? Number(req.query.id_categoria) : undefined;
+    const id_subcategoria = req.query.id_subcategoria ? Number(req.query.id_subcategoria) : undefined;
     const buscar = typeof req.query.buscar === "string" ? req.query.buscar.trim() : "";
-    const productos = await prisma.productoProveedor.findMany({
-      where: {
-        ...(id_proveedor ? { id_proveedor } : {}),
-        ...(id_producto ? { id_producto } : {}),
-        ...(buscar
-          ? {
-              OR: [
-                { sku_producto_proveedor: { contains: buscar, mode: "insensitive" } },
-                { nombre_producto_proveedor: { contains: buscar, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-      },
-      include: { proveedor: true, producto: true },
-      orderBy: { nombre_producto_proveedor: "asc" },
-    });
-    res.json(productos);
-  }),
-);
+    const page = req.query.page ? Math.max(Number(req.query.page), 1) : undefined;
+    const pageSize = req.query.pageSize ? Math.min(Math.max(Number(req.query.pageSize), 1), 200) : undefined;
+    const where = {
+      ...(id_proveedor ? { id_proveedor } : {}),
+      ...(id_categoria ? { id_categoria } : {}),
+      ...(id_subcategoria ? { id_subcategoria } : {}),
+      ...(buscar
+        ? {
+            OR: [
+              { sku_producto_proveedor: { contains: buscar, mode: "insensitive" as const } },
+              { nombre_producto_proveedor: { contains: buscar, mode: "insensitive" as const } },
+              { marca_producto_proveedor: { contains: buscar, mode: "insensitive" as const } },
+              { modelo_producto_proveedor: { contains: buscar, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
+    const query = {
+      where,
+      include: { proveedor: true, categoria: true, subcategoria: true },
+      orderBy: { nombre_producto_proveedor: "asc" as const },
+    };
 
-productosProveedorRouter.get(
-  "/pendientes",
-  asyncHandler(async (req, res) => {
-    const id_proveedor = req.query.id_proveedor ? Number(req.query.id_proveedor) : undefined;
-    const productos = await prisma.productoProveedor.findMany({
-      where: { id_producto: null, ...(id_proveedor ? { id_proveedor } : {}) },
-      include: { proveedor: true },
-      orderBy: { nombre_producto_proveedor: "asc" },
-    });
+    if (page && pageSize) {
+      const [productos, total] = await Promise.all([
+        prisma.productoProveedor.findMany({ ...query, skip: (page - 1) * pageSize, take: pageSize }),
+        prisma.productoProveedor.count({ where }),
+      ]);
+      res.json({ data: productos, total, page, pageSize, totalPages: Math.max(Math.ceil(total / pageSize), 1) });
+      return;
+    }
+
+    const productos = await prisma.productoProveedor.findMany(query);
     res.json(productos);
   }),
 );
@@ -52,6 +56,7 @@ productosProveedorRouter.post(
   "",
   asyncHandler(async (req, res) => {
     const data = productoProveedorCreateSchema.parse(req.body);
+    await validateCategoriaSubcategoria(data);
     const producto = await prisma.productoProveedor.create({ data });
     res.status(201).json(producto);
   }),
@@ -62,25 +67,23 @@ productosProveedorRouter.put(
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
     const data = productoProveedorUpdateSchema.parse(req.body);
+    const actual = await prisma.productoProveedor.findUnique({ where: { id } });
+    if (!actual) throw new HttpError(404, "Producto de proveedor no encontrado");
+    await validateCategoriaSubcategoria({
+      id_categoria: data.id_categoria === undefined ? actual.id_categoria : data.id_categoria,
+      id_subcategoria: data.id_subcategoria === undefined ? actual.id_subcategoria : data.id_subcategoria,
+    });
     res.json(await prisma.productoProveedor.update({ where: { id }, data }));
   }),
 );
 
-productosProveedorRouter.post(
-  "/:id/vincular",
-  asyncHandler(async (req, res) => {
-    const id = parseId(req.params.id);
-    const { id_producto } = vincularProductoSchema.parse(req.body);
-    const producto = await prisma.producto.findUnique({ where: { id: id_producto } });
-    if (!producto) throw new HttpError(404, "Producto interno no encontrado");
-    res.json(await prisma.productoProveedor.update({ where: { id }, data: { id_producto } }));
-  }),
-);
+async function validateCategoriaSubcategoria(data: { id_categoria?: number | null; id_subcategoria?: number | null }) {
+  if (!data.id_subcategoria) return;
+  if (!data.id_categoria) throw new HttpError(400, "La subcategoria requiere una categoria");
 
-productosProveedorRouter.post(
-  "/:id/desvincular",
-  asyncHandler(async (req, res) => {
-    const id = parseId(req.params.id);
-    res.json(await prisma.productoProveedor.update({ where: { id }, data: { id_producto: null } }));
-  }),
-);
+  const subcategoria = await prisma.subcategoria.findUnique({ where: { id: data.id_subcategoria } });
+  if (!subcategoria) throw new HttpError(409, "Subcategoria invalida");
+  if (subcategoria.id_categoria !== data.id_categoria) {
+    throw new HttpError(400, "La subcategoria no pertenece a la categoria seleccionada");
+  }
+}

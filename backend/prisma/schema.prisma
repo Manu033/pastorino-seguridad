@@ -19,6 +19,20 @@ enum Moneda {
   USD
 }
 
+enum TipoItemCotizacion {
+  PRODUCTO
+  MANUAL
+}
+
+enum TipoCotizacion {
+  EXTINCION
+  DETECCION
+}
+
+enum RedondeoCompra {
+  ARRIBA
+}
+
 model Proveedor {
   id                  Int                 @id @default(autoincrement())
   nombre              String              @unique @db.VarChar(150)
@@ -35,66 +49,103 @@ model Categoria {
   id            Int            @id @default(autoincrement())
   nombre        String         @unique @db.VarChar(120)
   subcategorias Subcategoria[]
-  productos     Producto[]
+  productos_proveedor ProductoProveedor[]
 
   @@map("categorias")
 }
 
 model Subcategoria {
-  id           Int        @id @default(autoincrement())
-  id_categoria Int
-  nombre       String     @db.VarChar(120)
-  categoria    Categoria  @relation(fields: [id_categoria], references: [id])
-  productos    Producto[]
+  id                  Int                 @id @default(autoincrement())
+  id_categoria        Int
+  nombre              String              @db.VarChar(120)
+  categoria           Categoria           @relation(fields: [id_categoria], references: [id])
+  productos_proveedor ProductoProveedor[]
 
   @@unique([id_categoria, nombre], name: "uq_subcategorias_categoria_nombre")
   @@index([id_categoria])
   @@map("subcategorias")
 }
 
-model Producto {
-  id                  Int                 @id @default(autoincrement())
-  sku_interno         String              @unique @db.VarChar(80)
-  nombre_normalizado  String              @db.VarChar(255)
-  id_categoria        Int
-  id_subcategoria     Int?
-  marca               String?             @db.VarChar(120)
-  modelo              String?             @db.VarChar(120)
-  descripcion         String?
-  imagen_url          String?             @db.VarChar(500)
-  activo              Boolean             @default(true)
-  categoria           Categoria           @relation(fields: [id_categoria], references: [id])
-  subcategoria        Subcategoria?       @relation(fields: [id_subcategoria], references: [id])
-  productos_proveedor ProductoProveedor[]
-
-  @@index([nombre_normalizado])
-  @@index([id_categoria])
-  @@index([id_subcategoria])
-  @@map("productos")
-}
-
 model ProductoProveedor {
   id                         Int               @id @default(autoincrement())
   id_proveedor               Int
-  id_producto                Int?
+  id_categoria               Int?
+  id_subcategoria            Int?
   sku_producto_proveedor     String            @db.VarChar(120)
   nombre_producto_proveedor  String            @db.VarChar(255)
   marca_producto_proveedor   String?           @db.VarChar(120)
   modelo_producto_proveedor  String?           @db.VarChar(120)
+  descripcion                String?
+  imagen_url                 String?           @db.VarChar(500)
   unidad                     String?           @db.VarChar(40)
+  unidad_calculo             String?           @db.VarChar(40)
+  cantidad_por_unidad_compra Decimal?          @db.Decimal(14, 4)
+  redondeo_compra            RedondeoCompra?
   precio_actual              Decimal?          @db.Decimal(14, 4)
   moneda_actual              Moneda?
   fecha_precio_actualizada   DateTime?
   activo                     Boolean           @default(true)
   proveedor                  Proveedor         @relation(fields: [id_proveedor], references: [id])
-  producto                   Producto?         @relation(fields: [id_producto], references: [id])
+  categoria                  Categoria?        @relation(fields: [id_categoria], references: [id])
+  subcategoria               Subcategoria?     @relation(fields: [id_subcategoria], references: [id])
   historial_precios          HistorialPrecio[]
+  cotizacion_items           CotizacionItem[]
 
   @@unique([id_proveedor, sku_producto_proveedor], name: "uq_productos_proveedor_proveedor_sku")
   @@index([id_proveedor])
-  @@index([id_producto])
+  @@index([id_categoria])
+  @@index([id_subcategoria])
   @@index([sku_producto_proveedor])
   @@map("productos_proveedor")
+}
+
+model Cotizacion {
+  id                         Int              @id @default(autoincrement())
+  tipo                       TipoCotizacion   @default(EXTINCION)
+  titulo                     String           @db.VarChar(180)
+  cliente                    String?          @db.VarChar(180)
+  contacto_cliente           String?          @db.VarChar(180)
+  cuit_cliente               String?          @db.VarChar(80)
+  email_cliente              String?          @db.VarChar(255)
+  obra                       String?          @db.VarChar(180)
+  fecha_emision              DateTime?
+  validez_dias               Int?             @default(30)
+  moneda_base                Moneda           @default(USD)
+  observaciones              String?
+  dolar_referencia           Decimal?         @db.Decimal(14, 4)
+  costo_directo_usd          Decimal          @default(0) @db.Decimal(14, 4)
+  porcentaje_utilidad        Decimal          @default(0) @db.Decimal(8, 4)
+  monto_utilidad_usd         Decimal          @default(0) @db.Decimal(14, 4)
+  subtotal_usd               Decimal          @default(0) @db.Decimal(14, 4)
+  aplica_costos_varios       Boolean          @default(false)
+  porcentaje_costos_varios   Decimal          @default(0) @db.Decimal(8, 4)
+  monto_costos_varios_usd    Decimal          @default(0) @db.Decimal(14, 4)
+  total_usd                  Decimal          @db.Decimal(14, 4)
+  creada_en                  DateTime         @default(now())
+  items                      CotizacionItem[]
+
+  @@index([creada_en])
+  @@index([tipo])
+  @@map("cotizaciones")
+}
+
+model CotizacionItem {
+  id                    Int                @id @default(autoincrement())
+  id_cotizacion         Int
+  id_producto_proveedor Int?
+  tipo                  TipoItemCotizacion
+  descripcion           String             @db.VarChar(500)
+  cantidad              Decimal            @db.Decimal(14, 4)
+  unidad                String?            @db.VarChar(40)
+  precio_unitario       Decimal            @db.Decimal(14, 4)
+  moneda                Moneda
+  total_usd             Decimal            @db.Decimal(14, 4)
+  cotizacion            Cotizacion         @relation(fields: [id_cotizacion], references: [id], onDelete: Cascade)
+  producto_proveedor    ProductoProveedor? @relation(fields: [id_producto_proveedor], references: [id], onDelete: SetNull)
+
+  @@index([id_cotizacion])
+  @@index([id_producto_proveedor])
+  @@map("cotizacion_items")
 }
 
 model HistorialPrecio {

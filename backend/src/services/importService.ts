@@ -41,6 +41,9 @@ export async function processImportacionJson(
         marca_producto_proveedor: row.marca_producto_proveedor,
         modelo_producto_proveedor: row.modelo_producto_proveedor,
         unidad: row.unidad,
+        unidad_calculo: row.unidad_calculo,
+        cantidad_por_unidad_compra: row.cantidad_por_unidad_compra ?? null,
+        redondeo_compra: row.redondeo_compra ?? null,
         precio_actual: row.precio,
         moneda_actual: row.moneda,
         fecha_precio_actualizada: now,
@@ -55,7 +58,6 @@ export async function processImportacionJson(
         : await tx.productoProveedor.create({
             data: {
               id_proveedor: proveedorId,
-              id_producto: null,
               sku_producto_proveedor: row.sku_producto_proveedor,
               ...data,
             },
@@ -95,6 +97,11 @@ function productoChanged(
     marca_producto_proveedor: string | null;
     modelo_producto_proveedor: string | null;
     unidad: string | null;
+    unidad_calculo: string | null;
+    cantidad_por_unidad_compra: unknown;
+    redondeo_compra: string | null;
+    precio_actual: unknown;
+    moneda_actual: string | null;
     activo: boolean;
   },
   data: {
@@ -102,6 +109,11 @@ function productoChanged(
     marca_producto_proveedor: string | null;
     modelo_producto_proveedor: string | null;
     unidad: string | null;
+    unidad_calculo: string | null;
+    cantidad_por_unidad_compra: unknown;
+    redondeo_compra: string | null;
+    precio_actual: unknown;
+    moneda_actual: string;
     activo: boolean;
   },
 ) {
@@ -110,6 +122,11 @@ function productoChanged(
     actual.marca_producto_proveedor !== data.marca_producto_proveedor ||
     actual.modelo_producto_proveedor !== data.modelo_producto_proveedor ||
     actual.unidad !== data.unidad ||
+    actual.unidad_calculo !== data.unidad_calculo ||
+    String(actual.cantidad_por_unidad_compra ?? "") !== String(data.cantidad_por_unidad_compra ?? "") ||
+    actual.redondeo_compra !== data.redondeo_compra ||
+    String(actual.precio_actual ?? "") !== String(data.precio_actual ?? "") ||
+    actual.moneda_actual !== data.moneda_actual ||
     actual.activo !== data.activo
   );
 }

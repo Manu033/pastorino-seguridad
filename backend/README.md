@@ -1,6 +1,6 @@
 # Pastorino Seguridad API Node
 
-Backend MVP en Node.js + TypeScript para manejar proveedores, productos internos, productos de proveedor e historial de precios.
+Backend MVP en Node.js + TypeScript para manejar proveedores, productos de proveedor e historial de precios.
 
 ## Stack
 
@@ -42,7 +42,7 @@ npm run dev
 La API queda en:
 
 ```txt
-http://127.0.0.1:8011
+http://127.0.0.1:8001
 ```
 
 Healthcheck:
@@ -68,24 +68,20 @@ GET    /subcategorias
 POST   /subcategorias
 PUT    /subcategorias/:id
 
-GET    /productos
-POST   /productos
-GET    /productos/:id
-PUT    /productos/:id
-DELETE /productos/:id
-
 GET    /productos-proveedor
-GET    /productos-proveedor/pendientes
 POST   /productos-proveedor
 PUT    /productos-proveedor/:id
-POST   /productos-proveedor/:id/vincular
-POST   /productos-proveedor/:id/desvincular
 
 POST   /importaciones/:proveedorId/preview-json
 POST   /importaciones/:proveedorId/procesar-json
 
 GET    /productos-proveedor/:id/ultimo-precio
 GET    /productos-proveedor/:id/historial-precios
+
+GET    /cotizaciones
+POST   /cotizaciones
+GET    /cotizaciones/:id
+PUT    /cotizaciones/:id
 ```
 
 ## Importacion JSON

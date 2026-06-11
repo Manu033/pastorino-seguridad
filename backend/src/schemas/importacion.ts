@@ -7,6 +7,9 @@ export const filaImportacionNormalizadaSchema = z.object({
   marca_producto_proveedor: optionalText(120),
   modelo_producto_proveedor: optionalText(120),
   unidad: optionalText(40),
+  unidad_calculo: optionalText(40),
+  cantidad_por_unidad_compra: z.coerce.number().positive().optional().nullable(),
+  redondeo_compra: z.enum(["ARRIBA"]).optional().nullable(),
   moneda: monedaSchema,
   precio: z.coerce.number().positive(),
 });

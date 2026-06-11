@@ -1,122 +1,41 @@
 import React, { useEffect, useMemo, useState } from "react";
-import Logo from "./assets/imagenes/logo-completo.jpg";
+import { request } from "./api/client.js";
+import { AppHeader, Tabs } from "./components/AppHeader.jsx";
+import { Status } from "./components/ui.jsx";
+import { CategoriasTab } from "./features/categorias/CategoriasTab.jsx";
+import { CotizacionModal } from "./features/cotizaciones/CotizacionModal.jsx";
+import { CotizacionesTab } from "./features/cotizaciones/CotizacionesTab.jsx";
+import { calcularResumenCotizacion } from "./features/cotizaciones/calculos.js";
+import { openCotizacionPdf } from "./features/cotizaciones/cotizacionPdf.js";
+import { calcularCompraProducto, describirCompraProducto } from "./features/cotizaciones/unidades.js";
+import { ImportacionesTab } from "./features/importaciones/ImportacionesTab.jsx";
+import { HistorialPreciosTab } from "./features/precios/HistorialPreciosTab.jsx";
+import { ProductoModal } from "./features/productos/ProductoModal.jsx";
+import { ProductosTab } from "./features/productos/ProductosTab.jsx";
+import { ProveedorModal } from "./features/proveedores/ProveedorModal.jsx";
+import { ProveedoresTab } from "./features/proveedores/ProveedoresTab.jsx";
+import {
+  API_DEFAULT,
+  DOLAR_OFICIAL_URL,
+  emptyCategoria,
+  emptyCotizacionForm,
+  emptyCotizacionManual,
+  emptyCotizacionManoObra,
+  emptyCotizacionProducto,
+  emptyProductoProveedor,
+  emptyProveedor,
+  emptySubcategoria,
+  sampleImport,
+} from "./constants/forms.js";
+import { cleanText, toNumber, toNumberOrNull } from "./utils/format.js";
 
-const API_DEFAULT = import.meta.env.VITE_API_URL || "http://127.0.0.1:8011";
-const DOLAR_OFICIAL_URL = "https://dolarapi.com/v1/dolares/oficial";
-const emptyProveedor = { nombre: "", email_contacto: "", telefono: "", tipo_fuente: "MANUAL", activo: true };
-const emptyCategoria = { nombre: "" };
-const emptySubcategoria = { id_categoria: "", nombre: "" };
-const emptyProducto = {
-  sku_interno: "",
-  nombre_normalizado: "",
-  id_categoria: "",
-  id_subcategoria: "",
-  marca: "",
-  modelo: "",
-  descripcion: "",
-  imagen_url: "",
-  activo: true,
-};
-const emptyProductoProveedor = {
-  id_proveedor: "",
-  id_producto: "",
-  sku_producto_proveedor: "",
-  nombre_producto_proveedor: "",
-  marca_producto_proveedor: "",
-  modelo_producto_proveedor: "",
-  unidad: "",
-  precio_actual: "",
-  moneda_actual: "ARS",
-  fecha_precio_actualizada: "",
-  activo: true,
-};
-const sampleImport = JSON.stringify(
-  [
-    {
-      sku_producto_proveedor: "17002",
-      nombre_producto_proveedor: "Tubo CC Iram 2502 21.3x2.00mm",
-      marca_producto_proveedor: null,
-      modelo_producto_proveedor: null,
-      unidad: "mts",
-      moneda: "USD",
-      precio: 1.68,
-    },
-  ],
-  null,
-  2,
-);
-
-function toNumberOrNull(value) {
-  if (value === "" || value === null || value === undefined) return null;
-  return Number(value);
-}
-
-function cleanText(value) {
-  return typeof value === "string" && value.trim() === "" ? null : value;
-}
-
-function formatMoney(value, currency) {
-  if (value === null || value === undefined || value === "") return "-";
-  return `${currency || ""} ${Number(value).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`.trim();
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-  return new Date(value).toLocaleString("es-AR");
-}
-
-function formatShortDate(value) {
-  if (!value) return "";
-  return new Date(value).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
-}
-
-async function request(apiUrl, path, options = {}) {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
-  });
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!response.ok) {
-    const detail = data?.message || data?.error || JSON.stringify(data);
-    throw new Error(detail || `Error HTTP ${response.status}`);
-  }
-  return data;
-}
-
-function Field({ label, children }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function TextInput({ value, onChange, type = "text", placeholder = "" }) {
-  return <input type={type} value={value ?? ""} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />;
-}
-
-function Select({ value, onChange, children }) {
-  return <select value={value ?? ""} onChange={(event) => onChange(event.target.value)}>{children}</select>;
-}
-
-function Checkbox({ checked, onChange, label }) {
-  return (
-    <label className="check">
-      <input type="checkbox" checked={Boolean(checked)} onChange={(event) => onChange(event.target.checked)} />
-      <span>{label}</span>
-    </label>
-  );
-}
-
-function Actions({ children }) {
-  return <div className="actions">{children}</div>;
-}
-
-function Status({ message, error }) {
-  if (!message && !error) return null;
-  return <div className={error ? "status error" : "status"}>{error || message}</div>;
+function normalizeSearch(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w]+/g, " ")
+    .trim();
 }
 
 function App() {
@@ -132,36 +51,110 @@ function App() {
   const [proveedores, setProveedores] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [subcategorias, setSubcategorias] = useState([]);
-  const [productos, setProductos] = useState([]);
   const [productosProveedor, setProductosProveedor] = useState([]);
-  const [pendientes, setPendientes] = useState([]);
+  const [productosBusqueda, setProductosBusqueda] = useState([]);
+  const [productosProveedorMeta, setProductosProveedorMeta] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
+  const [cotizaciones, setCotizaciones] = useState([]);
   const [historial, setHistorial] = useState([]);
   const [ultimoPrecio, setUltimoPrecio] = useState(null);
 
   const [proveedorForm, setProveedorForm] = useState(emptyProveedor);
   const [categoriaForm, setCategoriaForm] = useState(emptyCategoria);
   const [subcategoriaForm, setSubcategoriaForm] = useState(emptySubcategoria);
-  const [productoForm, setProductoForm] = useState(emptyProducto);
   const [productoProveedorForm, setProductoProveedorForm] = useState(emptyProductoProveedor);
   const [editing, setEditing] = useState({});
 
   const [filters, setFilters] = useState({
     incluirInactivos: false,
-    buscarProducto: "",
     buscarProductoProveedor: "",
     idProveedorProducto: "",
-    idProductoProveedor: "",
-    soloPendientes: false,
+    idCategoriaProducto: "",
+    idSubcategoriaProducto: "",
   });
-  const [linkForm, setLinkForm] = useState({ id_producto_proveedor: "", id_producto: "" });
+  const [productosPage, setProductosPage] = useState(1);
   const [historialId, setHistorialId] = useState("");
+  const [historialFilters, setHistorialFilters] = useState({ buscar: "", idProveedor: "" });
+  const [historialDropdownOpen, setHistorialDropdownOpen] = useState(false);
+  const [cotizacionForm, setCotizacionForm] = useState(emptyCotizacionForm);
+  const [cotizacionProducto, setCotizacionProducto] = useState(emptyCotizacionProducto);
+  const [cotizacionManual, setCotizacionManual] = useState(emptyCotizacionManual);
+  const [cotizacionManoObra, setCotizacionManoObra] = useState(emptyCotizacionManoObra);
+  const [cotizacionItems, setCotizacionItems] = useState([]);
+  const [cotizacionDropdownOpen, setCotizacionDropdownOpen] = useState(false);
+  const [cotizacionSeleccionada, setCotizacionSeleccionada] = useState(null);
+  const [cotizacionEdit, setCotizacionEdit] = useState(null);
+  const [cotizacionEditando, setCotizacionEditando] = useState(false);
+  const [proveedorSeleccionado, setProveedorSeleccionado] = useState(null);
+  const [proveedorEdit, setProveedorEdit] = useState(null);
+  const [proveedorEditando, setProveedorEditando] = useState(false);
+  const [proveedorModalOpen, setProveedorModalOpen] = useState(false);
+  const [productoSeleccionado, setProductoSeleccionado] = useState(null);
+  const [productoEdit, setProductoEdit] = useState(null);
+  const [productoEditando, setProductoEditando] = useState(false);
+  const [productoProveedorModalOpen, setProductoProveedorModalOpen] = useState(false);
   const [importProveedorId, setImportProveedorId] = useState("");
   const [importJson, setImportJson] = useState(sampleImport);
   const [importResult, setImportResult] = useState(null);
 
-  const subcategoriasProducto = useMemo(
-    () => subcategorias.filter((item) => String(item.id_categoria) === String(productoForm.id_categoria)),
-    [subcategorias, productoForm.id_categoria],
+  const subcategoriasProductoProveedor = useMemo(
+    () => subcategorias.filter((item) => String(item.id_categoria) === String(productoProveedorForm.id_categoria)),
+    [subcategorias, productoProveedorForm.id_categoria],
+  );
+  const subcategoriasProductoEdit = useMemo(
+    () => subcategorias.filter((item) => String(item.id_categoria) === String(productoEdit?.id_categoria)),
+    [subcategorias, productoEdit?.id_categoria],
+  );
+  const productosHistorial = useMemo(() => {
+    const buscar = normalizeSearch(historialFilters.buscar);
+    return productosBusqueda.filter((item) => {
+      const coincideProveedor = !historialFilters.idProveedor || String(item.id_proveedor) === String(historialFilters.idProveedor);
+      const texto = normalizeSearch(`${item.sku_producto_proveedor} ${item.nombre_producto_proveedor} ${item.proveedor?.nombre || ""}`);
+      const coincideBusqueda = !buscar || texto.includes(buscar);
+      return coincideProveedor && coincideBusqueda;
+    });
+  }, [historialFilters, productosBusqueda]);
+  const productoHistorialSeleccionado = useMemo(
+    () => productosBusqueda.find((item) => String(item.id) === String(historialId)),
+    [historialId, productosBusqueda],
+  );
+  const productosCotizacion = useMemo(() => {
+    const buscar = normalizeSearch(cotizacionProducto.buscar);
+    return productosBusqueda.filter((item) => {
+      const coincideProveedor = !cotizacionProducto.idProveedor || String(item.id_proveedor) === String(cotizacionProducto.idProveedor);
+      const texto = normalizeSearch(`${item.sku_producto_proveedor} ${item.nombre_producto_proveedor} ${item.proveedor?.nombre || ""}`);
+      return coincideProveedor && (!buscar || texto.includes(buscar));
+    });
+  }, [cotizacionProducto, productosBusqueda]);
+  const productoCotizacionSeleccionado = useMemo(
+    () => productosBusqueda.find((item) => String(item.id) === String(cotizacionProducto.idProducto)),
+    [cotizacionProducto.idProducto, productosBusqueda],
+  );
+  const dolarVenta = toNumber(dolarOficial?.venta);
+  const cotizacionCostoDirectoUsd = useMemo(
+    () => cotizacionItems.reduce((total, item) => total + toNumber(item.total_usd), 0),
+    [cotizacionItems],
+  );
+  const cotizacionResumen = useMemo(
+    () => calcularResumenCotizacion(
+      cotizacionCostoDirectoUsd,
+      cotizacionForm.porcentaje_utilidad,
+      cotizacionForm.aplica_costos_varios,
+      cotizacionForm.porcentaje_costos_varios,
+    ),
+    [cotizacionCostoDirectoUsd, cotizacionForm],
+  );
+  const cotizacionEditCostoDirectoUsd = useMemo(
+    () => (cotizacionEdit?.items || []).reduce((total, item) => total + toNumber(item.total_usd), 0),
+    [cotizacionEdit],
+  );
+  const cotizacionEditResumen = useMemo(
+    () => calcularResumenCotizacion(
+      cotizacionEditCostoDirectoUsd,
+      cotizacionEdit?.porcentaje_utilidad,
+      cotizacionEdit?.aplica_costos_varios,
+      cotizacionEdit?.porcentaje_costos_varios,
+    ),
+    [cotizacionEditCostoDirectoUsd, cotizacionEdit],
   );
 
   async function run(label, callback) {
@@ -193,27 +186,50 @@ function App() {
     });
   }
 
-  async function loadProductos() {
-    await run("Productos actualizados", async () => {
-      const query = new URLSearchParams({
-        incluir_inactivos: String(filters.incluirInactivos),
-        ...(filters.buscarProducto ? { buscar: filters.buscarProducto } : {}),
-      });
-      setProductos(await request(apiUrl, `/productos?${query}`));
-    });
-  }
-
-  async function loadProductosProveedor() {
+  async function loadProductosProveedor(pageOverride = productosPage) {
     await run("Productos de proveedor actualizados", async () => {
       const query = new URLSearchParams({
         ...(filters.buscarProductoProveedor ? { buscar: filters.buscarProductoProveedor } : {}),
         ...(filters.idProveedorProducto ? { id_proveedor: filters.idProveedorProducto } : {}),
-        ...(filters.idProductoProveedor ? { id_producto: filters.idProductoProveedor } : {}),
+        ...(filters.idCategoriaProducto ? { id_categoria: filters.idCategoriaProducto } : {}),
+        ...(filters.idSubcategoriaProducto ? { id_subcategoria: filters.idSubcategoriaProducto } : {}),
+        page: String(pageOverride),
+        pageSize: String(productosProveedorMeta.pageSize),
       });
-      const path = filters.soloPendientes ? `/productos-proveedor/pendientes?${query}` : `/productos-proveedor?${query}`;
-      const data = await request(apiUrl, path);
-      if (filters.soloPendientes) setPendientes(data);
-      setProductosProveedor(data);
+      const data = await request(apiUrl, `/productos-proveedor?${query}`);
+      setProductosProveedor(data.data || data);
+      if (data.data) {
+        setProductosProveedorMeta({
+          page: data.page,
+          pageSize: data.pageSize,
+          total: data.total,
+          totalPages: data.totalPages,
+        });
+        setProductosPage(data.page);
+      }
+    });
+  }
+
+  async function loadProductosBusqueda() {
+    const query = new URLSearchParams({ page: "1", pageSize: "200" });
+    const data = await request(apiUrl, `/productos-proveedor?${query}`);
+    setProductosBusqueda(data.data || data);
+  }
+
+  function searchProductosProveedor() {
+    setProductosPage(1);
+    loadProductosProveedor(1);
+  }
+
+  function goProductosPage(page) {
+    const nextPage = Math.min(Math.max(page, 1), productosProveedorMeta.totalPages || 1);
+    setProductosPage(nextPage);
+    loadProductosProveedor(nextPage);
+  }
+
+  async function loadCotizaciones() {
+    await run("Cotizaciones actualizadas", async () => {
+      setCotizaciones(await request(apiUrl, "/cotizaciones"));
     });
   }
 
@@ -239,8 +255,9 @@ function App() {
 
   useEffect(() => {
     loadBaseData();
-    loadProductos();
     loadProductosProveedor();
+    loadProductosBusqueda();
+    loadCotizaciones();
     checkHealth();
     loadDolarOficial();
   }, []);
@@ -255,29 +272,21 @@ function App() {
     };
   }
 
-  function productoPayload(form) {
-    return {
-      sku_interno: form.sku_interno,
-      nombre_normalizado: form.nombre_normalizado,
-      id_categoria: Number(form.id_categoria),
-      id_subcategoria: toNumberOrNull(form.id_subcategoria),
-      marca: cleanText(form.marca),
-      modelo: cleanText(form.modelo),
-      descripcion: cleanText(form.descripcion),
-      imagen_url: cleanText(form.imagen_url),
-      activo: Boolean(form.activo),
-    };
-  }
-
   function productoProveedorPayload(form) {
     return {
       id_proveedor: Number(form.id_proveedor),
-      id_producto: toNumberOrNull(form.id_producto),
+      id_categoria: toNumberOrNull(form.id_categoria),
+      id_subcategoria: toNumberOrNull(form.id_subcategoria),
       sku_producto_proveedor: form.sku_producto_proveedor,
       nombre_producto_proveedor: form.nombre_producto_proveedor,
       marca_producto_proveedor: cleanText(form.marca_producto_proveedor),
       modelo_producto_proveedor: cleanText(form.modelo_producto_proveedor),
+      descripcion: cleanText(form.descripcion),
+      imagen_url: cleanText(form.imagen_url),
       unidad: cleanText(form.unidad),
+      unidad_calculo: cleanText(form.unidad_calculo),
+      cantidad_por_unidad_compra: toNumberOrNull(form.cantidad_por_unidad_compra),
+      redondeo_compra: form.redondeo_compra || null,
       precio_actual: toNumberOrNull(form.precio_actual),
       moneda_actual: form.moneda_actual || null,
       fecha_precio_actualizada: form.fecha_precio_actualizada ? new Date(form.fecha_precio_actualizada).toISOString() : null,
@@ -295,6 +304,53 @@ function App() {
       });
       setProveedorForm(emptyProveedor);
       setEditing((value) => ({ ...value, proveedor: null }));
+      setProveedorModalOpen(false);
+      await loadBaseData();
+    });
+  }
+
+  function openNuevoProveedorModal() {
+    setProveedorForm(emptyProveedor);
+    setEditing((value) => ({ ...value, proveedor: null }));
+    setProveedorModalOpen(true);
+  }
+
+  function closeNuevoProveedorModal() {
+    setProveedorForm(emptyProveedor);
+    setEditing((value) => ({ ...value, proveedor: null }));
+    setProveedorModalOpen(false);
+  }
+
+  function openProveedorModal(proveedor) {
+    setProveedorSeleccionado(proveedor);
+    setProveedorEdit({ ...proveedor });
+    setProveedorEditando(false);
+  }
+
+  function closeProveedorModal() {
+    setProveedorSeleccionado(null);
+    setProveedorEdit(null);
+    setProveedorEditando(false);
+  }
+
+  function cancelProveedorEdit() {
+    setProveedorEdit({ ...proveedorSeleccionado });
+    setProveedorEditando(false);
+  }
+
+  async function saveProveedorEdit() {
+    if (!proveedorEdit?.nombre?.trim()) {
+      setError("Carga un nombre para el proveedor");
+      return;
+    }
+    await run("Proveedor actualizado", async () => {
+      const updated = await request(apiUrl, `/proveedores/${proveedorEdit.id}`, {
+        method: "PUT",
+        body: JSON.stringify(proveedorPayload(proveedorEdit)),
+      });
+      setProveedorSeleccionado(updated);
+      setProveedorEdit({ ...updated });
+      setProveedorEditando(false);
       await loadBaseData();
     });
   }
@@ -327,20 +383,6 @@ function App() {
     });
   }
 
-  async function saveProducto(event) {
-    event.preventDefault();
-    await run("Producto guardado", async () => {
-      const id = editing.producto;
-      await request(apiUrl, id ? `/productos/${id}` : "/productos", {
-        method: id ? "PUT" : "POST",
-        body: JSON.stringify(productoPayload(productoForm)),
-      });
-      setProductoForm(emptyProducto);
-      setEditing((value) => ({ ...value, producto: null }));
-      await loadProductos();
-    });
-  }
-
   async function saveProductoProveedor(event) {
     event.preventDefault();
     await run("Producto de proveedor guardado", async () => {
@@ -351,41 +393,413 @@ function App() {
       });
       setProductoProveedorForm(emptyProductoProveedor);
       setEditing((value) => ({ ...value, productoProveedor: null }));
+      setProductoProveedorModalOpen(false);
       await loadProductosProveedor();
+      await loadProductosBusqueda();
     });
+  }
+
+  function openNuevoProductoModal() {
+    setProductoProveedorForm(emptyProductoProveedor);
+    setEditing((value) => ({ ...value, productoProveedor: null }));
+    setProductoProveedorModalOpen(true);
+  }
+
+  function closeNuevoProductoModal() {
+    setProductoProveedorForm(emptyProductoProveedor);
+    setEditing((value) => ({ ...value, productoProveedor: null }));
+    setProductoProveedorModalOpen(false);
+  }
+
+  function openProductoModal(producto) {
+    const edit = {
+      ...producto,
+      id_categoria: producto.id_categoria || "",
+      id_subcategoria: producto.id_subcategoria || "",
+      fecha_precio_actualizada: producto.fecha_precio_actualizada ? producto.fecha_precio_actualizada.slice(0, 16) : "",
+    };
+    setProductoSeleccionado(producto);
+    setProductoEdit(edit);
+    setProductoEditando(false);
+  }
+
+  function closeProductoModal() {
+    setProductoSeleccionado(null);
+    setProductoEdit(null);
+    setProductoEditando(false);
+  }
+
+  function cancelProductoEdit() {
+    if (!productoSeleccionado) return;
+    openProductoModal(productoSeleccionado);
+  }
+
+  async function saveProductoEdit() {
+    if (!productoEdit?.id_proveedor) {
+      setError("Selecciona un proveedor para el producto");
+      return;
+    }
+    if (!productoEdit?.sku_producto_proveedor?.trim() || !productoEdit?.nombre_producto_proveedor?.trim()) {
+      setError("Carga SKU y nombre del producto");
+      return;
+    }
+    await run("Producto actualizado", async () => {
+      const updated = await request(apiUrl, `/productos-proveedor/${productoEdit.id}`, {
+        method: "PUT",
+        body: JSON.stringify(productoProveedorPayload(productoEdit)),
+      });
+      const normalized = {
+        ...updated,
+        id_categoria: updated.id_categoria || "",
+        id_subcategoria: updated.id_subcategoria || "",
+        fecha_precio_actualizada: updated.fecha_precio_actualizada ? updated.fecha_precio_actualizada.slice(0, 16) : "",
+      };
+      setProductoSeleccionado(updated);
+      setProductoEdit(normalized);
+      setProductoEditando(false);
+      await loadProductosProveedor();
+      await loadProductosBusqueda();
+    });
+  }
+
+  function priceToUsd(precio, moneda) {
+    const value = toNumber(precio);
+    if (moneda === "USD") return value;
+    if (!dolarVenta) return 0;
+    return value / dolarVenta;
+  }
+
+  function itemTotalUsd(cantidad, precioUnitario, moneda, dolarReferencia = dolarVenta) {
+    const cantidadNumber = toNumber(cantidad);
+    const precioNumber = toNumber(precioUnitario);
+    if (moneda === "USD") return cantidadNumber * precioNumber;
+    const dolarNumber = toNumber(dolarReferencia);
+    return dolarNumber ? (cantidadNumber * precioNumber) / dolarNumber : 0;
+  }
+
+  function addProductoCotizacion(event) {
+    event.preventDefault();
+    if (!productoCotizacionSeleccionado) {
+      setError("Selecciona un producto para agregar");
+      return;
+    }
+    if (!productoCotizacionSeleccionado.precio_actual || !productoCotizacionSeleccionado.moneda_actual) {
+      setError("El producto seleccionado no tiene precio actual");
+      return;
+    }
+    if (productoCotizacionSeleccionado.moneda_actual === "ARS" && !dolarVenta) {
+      setError("No hay cotizacion de dolar disponible para convertir pesos a USD");
+      return;
+    }
+    const cantidadRequerida = toNumber(cotizacionProducto.cantidad);
+    if (cantidadRequerida <= 0) {
+      setError("La cantidad debe ser mayor a cero");
+      return;
+    }
+    const compra = calcularCompraProducto(productoCotizacionSeleccionado, cantidadRequerida);
+    if (compra.cantidadCompra <= 0) {
+      setError("No se pudo calcular la cantidad de compra del producto");
+      return;
+    }
+    const unitUsd = priceToUsd(productoCotizacionSeleccionado.precio_actual, productoCotizacionSeleccionado.moneda_actual);
+    const detalleCompra = describirCompraProducto(productoCotizacionSeleccionado, cantidadRequerida);
+    setCotizacionItems((items) => [
+      ...items,
+      {
+        localId: crypto.randomUUID(),
+        id_producto_proveedor: productoCotizacionSeleccionado.id,
+        tipo: "PRODUCTO",
+        descripcion: [
+          `${productoCotizacionSeleccionado.sku_producto_proveedor} - ${productoCotizacionSeleccionado.nombre_producto_proveedor}`,
+          detalleCompra,
+        ].filter(Boolean).join(" | "),
+        cantidad: compra.cantidadCompra,
+        unidad: productoCotizacionSeleccionado.unidad || "",
+        precio_unitario: toNumber(productoCotizacionSeleccionado.precio_actual),
+        moneda: productoCotizacionSeleccionado.moneda_actual,
+        total_usd: compra.cantidadCompra * unitUsd,
+      },
+    ]);
+    setCotizacionProducto(emptyCotizacionProducto);
+    setCotizacionDropdownOpen(false);
+    setError("");
+  }
+
+  function addManualCotizacion(event) {
+    event.preventDefault();
+    const cantidad = toNumber(cotizacionManual.cantidad);
+    const precio = toNumber(cotizacionManual.precio_unitario);
+    if (!cotizacionManual.descripcion.trim()) {
+      setError("Carga una descripcion para el item manual");
+      return;
+    }
+    if (cantidad <= 0 || precio < 0) {
+      setError("Cantidad y precio manual invalidos");
+      return;
+    }
+    if (cotizacionManual.moneda === "ARS" && !dolarVenta) {
+      setError("No hay cotizacion de dolar disponible para convertir pesos a USD");
+      return;
+    }
+    setCotizacionItems((items) => [
+      ...items,
+      {
+        localId: crypto.randomUUID(),
+        id_producto_proveedor: null,
+        tipo: "MANUAL",
+        descripcion: cotizacionManual.descripcion,
+        cantidad,
+        unidad: cleanText(cotizacionManual.unidad) || "",
+        precio_unitario: precio,
+        moneda: cotizacionManual.moneda,
+        total_usd: cantidad * priceToUsd(precio, cotizacionManual.moneda),
+      },
+    ]);
+    setCotizacionManual(emptyCotizacionManual);
+    setError("");
+  }
+
+  function addManoObraCotizacion(event) {
+    event.preventDefault();
+    const personas = toNumber(cotizacionManoObra.personas);
+    const dias = toNumber(cotizacionManoObra.dias);
+    const precio = toNumber(cotizacionManoObra.precio_unitario);
+    if (personas <= 0 || dias <= 0 || precio < 0) {
+      setError("Personas, dias y precio de mano de obra invalidos");
+      return;
+    }
+    if (cotizacionManoObra.moneda === "ARS" && !dolarVenta) {
+      setError("No hay cotizacion de dolar disponible para convertir pesos a USD");
+      return;
+    }
+    const cantidad = personas * dias;
+    setCotizacionItems((items) => [
+      ...items,
+      {
+        localId: crypto.randomUUID(),
+        id_producto_proveedor: null,
+        tipo: "MANUAL",
+        descripcion: `Mano de obra - ${personas} persona${personas === 1 ? "" : "s"} x ${dias} dia${dias === 1 ? "" : "s"}`,
+        cantidad,
+        unidad: "jornal",
+        precio_unitario: precio,
+        moneda: cotizacionManoObra.moneda,
+        total_usd: cantidad * priceToUsd(precio, cotizacionManoObra.moneda),
+      },
+    ]);
+    setCotizacionManoObra(emptyCotizacionManoObra);
+    setError("");
+  }
+
+  async function saveCotizacion(event) {
+    event.preventDefault();
+    if (!cotizacionForm.titulo.trim()) {
+      setError("Carga un titulo para la cotizacion");
+      return;
+    }
+    if (!cotizacionItems.length) {
+      setError("Agrega al menos un item a la cotizacion");
+      return;
+    }
+    await run("Cotizacion guardada", async () => {
+      await request(apiUrl, "/cotizaciones", {
+        method: "POST",
+        body: JSON.stringify({
+          ...cotizacionForm,
+          cliente: cleanText(cotizacionForm.cliente),
+          obra: cleanText(cotizacionForm.obra),
+          observaciones: cleanText(cotizacionForm.observaciones),
+          dolar_referencia: dolarVenta || null,
+          ...cotizacionResumen,
+          items: cotizacionItems.map(({ localId: _localId, ...item }) => item),
+        }),
+      });
+      setCotizacionForm(emptyCotizacionForm);
+      setCotizacionItems([]);
+      await loadCotizaciones();
+    });
+  }
+
+  async function openCotizacion(id) {
+    await run("Cotizacion cargada", async () => {
+      const cotizacion = await request(apiUrl, `/cotizaciones/${id}`);
+      setCotizacionSeleccionada(cotizacion);
+      setCotizacionEdit({
+        ...cotizacion,
+        titulo: cotizacion.titulo || "",
+        cliente: cotizacion.cliente || "",
+        obra: cotizacion.obra || "",
+        observaciones: cotizacion.observaciones || "",
+        dolar_referencia: cotizacion.dolar_referencia || "",
+        tipo: cotizacion.tipo || "EXTINCION",
+        porcentaje_utilidad: cotizacion.porcentaje_utilidad ?? "0",
+        aplica_costos_varios: Boolean(cotizacion.aplica_costos_varios),
+        porcentaje_costos_varios: cotizacion.porcentaje_costos_varios ?? "0",
+        items: (cotizacion.items || []).map((item) => ({
+          ...item,
+          localId: crypto.randomUUID(),
+          id_producto_proveedor: item.id_producto_proveedor || null,
+          cantidad: Number(item.cantidad),
+          precio_unitario: Number(item.precio_unitario),
+          total_usd: Number(item.total_usd),
+          unidad: item.unidad || "",
+        })),
+      });
+      setCotizacionEditando(false);
+    });
+  }
+
+  function closeCotizacionModal() {
+    setCotizacionSeleccionada(null);
+    setCotizacionEdit(null);
+    setCotizacionEditando(false);
+  }
+
+  function startCotizacionEdit() {
+    if (!cotizacionSeleccionada) return;
+    setCotizacionEdit({
+      ...cotizacionSeleccionada,
+      titulo: cotizacionSeleccionada.titulo || "",
+      cliente: cotizacionSeleccionada.cliente || "",
+      obra: cotizacionSeleccionada.obra || "",
+      observaciones: cotizacionSeleccionada.observaciones || "",
+      dolar_referencia: cotizacionSeleccionada.dolar_referencia || "",
+      tipo: cotizacionSeleccionada.tipo || "EXTINCION",
+      porcentaje_utilidad: cotizacionSeleccionada.porcentaje_utilidad ?? "0",
+      aplica_costos_varios: Boolean(cotizacionSeleccionada.aplica_costos_varios),
+      porcentaje_costos_varios: cotizacionSeleccionada.porcentaje_costos_varios ?? "0",
+      items: (cotizacionSeleccionada.items || []).map((item) => ({
+        ...item,
+        localId: crypto.randomUUID(),
+        id_producto_proveedor: item.id_producto_proveedor || null,
+        cantidad: Number(item.cantidad),
+        precio_unitario: Number(item.precio_unitario),
+        total_usd: Number(item.total_usd),
+        unidad: item.unidad || "",
+      })),
+    });
+    setCotizacionEditando(true);
+  }
+
+  function cancelCotizacionEdit() {
+    startCotizacionEdit();
+    setCotizacionEditando(false);
+  }
+
+  function updateCotizacionEdit(field, value) {
+    setCotizacionEdit((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateCotizacionEditItem(localId, field, value) {
+    setCotizacionEdit((current) => {
+      const dolarReferencia = field === "dolar_referencia" ? value : current.dolar_referencia;
+      return {
+        ...current,
+        items: current.items.map((item) => {
+          if (item.localId !== localId) return item;
+          const updated = { ...item, [field]: value };
+          return {
+            ...updated,
+            total_usd: itemTotalUsd(updated.cantidad, updated.precio_unitario, updated.moneda, dolarReferencia),
+          };
+        }),
+      };
+    });
+  }
+
+  function removeCotizacionEditItem(localId) {
+    setCotizacionEdit((current) => ({
+      ...current,
+      items: current.items.filter((item) => item.localId !== localId),
+    }));
+  }
+
+  async function saveCotizacionEdit() {
+    if (!cotizacionEdit?.titulo?.trim()) {
+      setError("Carga un titulo para la cotizacion");
+      return;
+    }
+    if (!cotizacionEdit.items?.length) {
+      setError("La cotizacion debe tener al menos un item");
+      return;
+    }
+    await run("Cotizacion actualizada", async () => {
+      const payload = {
+        tipo: cotizacionEdit.tipo || "EXTINCION",
+        titulo: cotizacionEdit.titulo,
+        cliente: cleanText(cotizacionEdit.cliente),
+        obra: cleanText(cotizacionEdit.obra),
+        observaciones: cleanText(cotizacionEdit.observaciones),
+        dolar_referencia: toNumberOrNull(cotizacionEdit.dolar_referencia),
+        ...cotizacionEditResumen,
+        items: cotizacionEdit.items.map(({ id: _id, localId: _localId, producto_proveedor: _producto, ...item }) => ({
+          id_producto_proveedor: item.id_producto_proveedor || null,
+          tipo: item.tipo,
+          descripcion: item.descripcion,
+          cantidad: toNumber(item.cantidad),
+          unidad: cleanText(item.unidad),
+          precio_unitario: toNumber(item.precio_unitario),
+          moneda: item.moneda,
+          total_usd: toNumber(item.total_usd),
+        })),
+      };
+      const updated = await request(apiUrl, `/cotizaciones/${cotizacionEdit.id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+      setCotizacionSeleccionada(updated);
+      setCotizacionEdit({
+        ...updated,
+        titulo: updated.titulo || "",
+        cliente: updated.cliente || "",
+        obra: updated.obra || "",
+        observaciones: updated.observaciones || "",
+        dolar_referencia: updated.dolar_referencia || "",
+        tipo: updated.tipo || "EXTINCION",
+        porcentaje_utilidad: updated.porcentaje_utilidad ?? "0",
+        aplica_costos_varios: Boolean(updated.aplica_costos_varios),
+        porcentaje_costos_varios: updated.porcentaje_costos_varios ?? "0",
+        items: (updated.items || []).map((item) => ({
+          ...item,
+          localId: crypto.randomUUID(),
+          cantidad: Number(item.cantidad),
+          precio_unitario: Number(item.precio_unitario),
+          total_usd: Number(item.total_usd),
+          unidad: item.unidad || "",
+        })),
+      });
+      await loadCotizaciones();
+      setCotizacionEditando(false);
+    });
+  }
+
+  async function printCotizacionById(id) {
+    await run("Cotizacion lista para PDF", async () => {
+      const cotizacion = await request(apiUrl, `/cotizaciones/${id}`);
+      setCotizacionSeleccionada(cotizacion);
+      printCotizacion(cotizacion);
+    });
+  }
+
+  function printCotizacion(cotizacion = cotizacionSeleccionada) {
+    const result = openCotizacionPdf(cotizacion);
+    if (!result.ok) setError(result.error);
   }
 
   async function softDelete(kind, id) {
-    const label = kind === "proveedor" ? "Proveedor desactivado" : "Producto desactivado";
-    const path = kind === "proveedor" ? `/proveedores/${id}` : `/productos/${id}`;
-    await run(label, async () => {
-      await request(apiUrl, path, { method: "DELETE" });
-      if (kind === "proveedor") await loadBaseData();
-      if (kind === "producto") await loadProductos();
-    });
-  }
-
-  async function vincularProducto(event) {
-    event.preventDefault();
-    await run("Producto vinculado", async () => {
-      await request(apiUrl, `/productos-proveedor/${linkForm.id_producto_proveedor}/vincular`, {
-        method: "POST",
-        body: JSON.stringify({ id_producto: Number(linkForm.id_producto) }),
-      });
-      setLinkForm({ id_producto_proveedor: "", id_producto: "" });
-      await loadProductosProveedor();
-    });
-  }
-
-  async function desvincularProducto(id) {
-    await run("Producto desvinculado", async () => {
-      await request(apiUrl, `/productos-proveedor/${id}/desvincular`, { method: "POST", body: JSON.stringify({}) });
-      await loadProductosProveedor();
+    if (kind !== "proveedor") return;
+    await run("Proveedor desactivado", async () => {
+      await request(apiUrl, `/proveedores/${id}`, { method: "DELETE" });
+      await loadBaseData();
     });
   }
 
   async function loadHistorial(event) {
     event.preventDefault();
+    if (!historialId) {
+      setError("Selecciona un producto proveedor para consultar precios");
+      return;
+    }
     await run("Historial cargado", async () => {
       const [historialData, ultimoData] = await Promise.all([
         request(apiUrl, `/productos-proveedor/${historialId}/historial-precios`),
@@ -405,240 +819,196 @@ function App() {
       });
       setImportResult(data);
       if (!preview) await loadProductosProveedor();
+      if (!preview) await loadProductosBusqueda();
     });
   }
 
   const tabs = [
     ["proveedores", "Proveedores"],
     ["categorias", "Categorias"],
-    ["productos", "Productos"],
-    ["productosProveedor", "Proveedor productos"],
-    ["vinculos", "Vinculos"],
+    ["productosProveedor", "Productos"],
+    ["cotizaciones", "Cotizaciones"],
     ["historial", "Precios"],
     ["importaciones", "Importacion JSON"],
   ];
 
   return (
     <main>
-      <header className="topbar">
-        <div>
-          <img src={Logo} alt="Logo Pastorino" className="Logo" />
-          <p>Administracion de proveedores, productos e historial de precios.</p>
-        </div>
-        <div className="apiBox">
-          <div className="dolarBox">
-            <span>Dolar oficial</span>
-            <strong>{dolarOficial ? formatMoney(dolarOficial.venta, "ARS") : "-"}</strong>
-            <small>
-              {dolarError || (dolarOficial?.fechaActualizacion ? `Act. ${formatShortDate(dolarOficial.fechaActualizacion)}` : "Venta")}
-            </small>
-          </div>
-          <Field label="API">
-            <TextInput value={apiUrl} onChange={setApiUrl} />
-          </Field>
-          <button type="button" onClick={checkHealth}>Comprobar</button>
-          <span className="pill">Health: {health}</span>
-        </div>
-      </header>
+      <AppHeader
+        apiUrl={apiUrl}
+        setApiUrl={setApiUrl}
+        checkHealth={checkHealth}
+        health={health}
+        dolarOficial={dolarOficial}
+        dolarError={dolarError}
+      />
 
-      <nav className="tabs">
-        {tabs.map(([id, label]) => (
-          <button type="button" className={activeTab === id ? "active" : ""} key={id} onClick={() => setActiveTab(id)}>
-            {label}
-          </button>
-        ))}
-      </nav>
+      <Tabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <Status message={status} error={error} />
       {loading && <div className="loading">Procesando...</div>}
 
       {activeTab === "proveedores" && (
-        <section className="grid categoryGrid">
-          <form className="panel" onSubmit={saveProveedor}>
-            <h2>{editing.proveedor ? "Editar proveedor" : "Nuevo proveedor"}</h2>
-            <Field label="Nombre"><TextInput value={proveedorForm.nombre} onChange={(nombre) => setProveedorForm({ ...proveedorForm, nombre })} /></Field>
-            <Field label="Email"><TextInput value={proveedorForm.email_contacto} onChange={(email_contacto) => setProveedorForm({ ...proveedorForm, email_contacto })} /></Field>
-            <Field label="Telefono"><TextInput value={proveedorForm.telefono} onChange={(telefono) => setProveedorForm({ ...proveedorForm, telefono })} /></Field>
-            <Field label="Tipo fuente">
-              <Select value={proveedorForm.tipo_fuente} onChange={(tipo_fuente) => setProveedorForm({ ...proveedorForm, tipo_fuente })}>
-                <option>MANUAL</option><option>EXCEL</option><option>PDF</option><option>API</option>
-              </Select>
-            </Field>
-            <Checkbox label="Activo" checked={proveedorForm.activo} onChange={(activo) => setProveedorForm({ ...proveedorForm, activo })} />
-            <Actions>
-              <button type="submit">Guardar</button>
-              <button type="button" className="secondary" onClick={() => { setProveedorForm(emptyProveedor); setEditing({ ...editing, proveedor: null }); }}>Limpiar</button>
-              <button type="button" className="secondary" onClick={loadBaseData}>Actualizar</button>
-            </Actions>
-          </form>
-          <section className="panel wide">
-            <div className="panelHead">
-              <h2>Listado</h2>
-              <Checkbox label="Incluir inactivos" checked={filters.incluirInactivos} onChange={(incluirInactivos) => setFilters({ ...filters, incluirInactivos })} />
-            </div>
-            <table><thead><tr><th>ID</th><th>Nombre</th><th>Fuente</th><th>Contacto</th><th>Activo</th><th></th></tr></thead><tbody>
-              {proveedores.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.id}</td><td>{item.nombre}</td><td>{item.tipo_fuente}</td><td>{item.email_contacto || item.telefono || "-"}</td><td>{item.activo ? "Si" : "No"}</td>
-                  <td className="rowActions">
-                    <button type="button" onClick={() => { setProveedorForm(item); setEditing({ ...editing, proveedor: item.id }); }}>Editar</button>
-                    <button type="button" className="danger" onClick={() => softDelete("proveedor", item.id)}>Desactivar</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody></table>
-          </section>
-        </section>
+        <ProveedoresTab
+          proveedorForm={proveedorForm}
+          setProveedorForm={setProveedorForm}
+          editing={editing}
+          setEditing={setEditing}
+          saveProveedor={saveProveedor}
+          proveedorModalOpen={proveedorModalOpen}
+          openNuevoProveedorModal={openNuevoProveedorModal}
+          closeNuevoProveedorModal={closeNuevoProveedorModal}
+          loadBaseData={loadBaseData}
+          filters={filters}
+          setFilters={setFilters}
+          proveedores={proveedores}
+          openProveedorModal={openProveedorModal}
+          softDelete={softDelete}
+        />
       )}
 
       {activeTab === "categorias" && (
-        <section className="grid">
-          <form className="panel" onSubmit={saveCategoria}>
-            <h2>{editing.categoria ? "Editar categoria" : "Nueva categoria"}</h2>
-            <Field label="Nombre"><TextInput value={categoriaForm.nombre} onChange={(nombre) => setCategoriaForm({ nombre })} /></Field>
-            <Actions><button type="submit">Guardar</button><button type="button" className="secondary" onClick={loadBaseData}>Actualizar</button></Actions>
-          </form>
-          <form className="panel" onSubmit={saveSubcategoria}>
-            <h2>{editing.subcategoria ? "Editar subcategoria" : "Nueva subcategoria"}</h2>
-            <Field label="Categoria"><Select value={subcategoriaForm.id_categoria} onChange={(id_categoria) => setSubcategoriaForm({ ...subcategoriaForm, id_categoria })}><option value="">Seleccionar</option>{categorias.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</Select></Field>
-            <Field label="Nombre"><TextInput value={subcategoriaForm.nombre} onChange={(nombre) => setSubcategoriaForm({ ...subcategoriaForm, nombre })} /></Field>
-            <Actions><button type="submit">Guardar</button></Actions>
-          </form>
-          <section className="panel wide">
-            <h2>Categorias y subcategorias</h2>
-            <table><thead><tr><th>ID</th><th>Categoria</th><th>Subcategorias</th><th></th></tr></thead><tbody>
-              {categorias.map((cat) => (
-                <tr key={cat.id}>
-                  <td>{cat.id}</td><td>{cat.nombre}</td>
-                  <td>{subcategorias.filter((sub) => sub.id_categoria === cat.id).map((sub) => sub.nombre).join(", ") || "-"}</td>
-                  <td><button type="button" onClick={() => { setCategoriaForm(cat); setEditing({ ...editing, categoria: cat.id }); }}>Editar</button></td>
-                </tr>
-              ))}
-            </tbody></table>
-            <h3>Subcategorias</h3>
-            <table><thead><tr><th>ID</th><th>Categoria</th><th>Nombre</th><th></th></tr></thead><tbody>
-              {subcategorias.map((sub) => (
-                <tr key={sub.id}><td>{sub.id}</td><td>{categorias.find((cat) => cat.id === sub.id_categoria)?.nombre || sub.id_categoria}</td><td>{sub.nombre}</td><td><button type="button" onClick={() => { setSubcategoriaForm(sub); setEditing({ ...editing, subcategoria: sub.id }); }}>Editar</button></td></tr>
-              ))}
-            </tbody></table>
-          </section>
-        </section>
-      )}
-
-      {activeTab === "productos" && (
-        <section className="grid">
-          <form className="panel" onSubmit={saveProducto}>
-            <h2>{editing.producto ? "Editar producto" : "Nuevo producto"}</h2>
-            <Field label="SKU interno"><TextInput value={productoForm.sku_interno} onChange={(sku_interno) => setProductoForm({ ...productoForm, sku_interno })} /></Field>
-            <Field label="Nombre normalizado"><TextInput value={productoForm.nombre_normalizado} onChange={(nombre_normalizado) => setProductoForm({ ...productoForm, nombre_normalizado })} /></Field>
-            <Field label="Categoria"><Select value={productoForm.id_categoria} onChange={(id_categoria) => setProductoForm({ ...productoForm, id_categoria, id_subcategoria: "" })}><option value="">Seleccionar</option>{categorias.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</Select></Field>
-            <Field label="Subcategoria"><Select value={productoForm.id_subcategoria || ""} onChange={(id_subcategoria) => setProductoForm({ ...productoForm, id_subcategoria })}><option value="">Sin subcategoria</option>{subcategoriasProducto.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</Select></Field>
-            <Field label="Marca"><TextInput value={productoForm.marca} onChange={(marca) => setProductoForm({ ...productoForm, marca })} /></Field>
-            <Field label="Modelo"><TextInput value={productoForm.modelo} onChange={(modelo) => setProductoForm({ ...productoForm, modelo })} /></Field>
-            <Field label="Descripcion"><textarea value={productoForm.descripcion || ""} onChange={(event) => setProductoForm({ ...productoForm, descripcion: event.target.value })} /></Field>
-            <Field label="Imagen URL"><TextInput value={productoForm.imagen_url} onChange={(imagen_url) => setProductoForm({ ...productoForm, imagen_url })} /></Field>
-            <Checkbox label="Activo" checked={productoForm.activo} onChange={(activo) => setProductoForm({ ...productoForm, activo })} />
-            <Actions><button type="submit">Guardar</button><button type="button" className="secondary" onClick={() => { setProductoForm(emptyProducto); setEditing({ ...editing, producto: null }); }}>Limpiar</button></Actions>
-          </form>
-          <section className="panel wide">
-            <div className="filters">
-              <Field label="Buscar"><TextInput value={filters.buscarProducto} onChange={(buscarProducto) => setFilters({ ...filters, buscarProducto })} /></Field>
-              <Checkbox label="Incluir inactivos" checked={filters.incluirInactivos} onChange={(incluirInactivos) => setFilters({ ...filters, incluirInactivos })} />
-              <button type="button" onClick={loadProductos}>Buscar</button>
-            </div>
-            <table><thead><tr><th>ID</th><th>SKU</th><th>Nombre</th><th>Categoria</th><th>Activo</th><th></th></tr></thead><tbody>
-              {productos.map((item) => (
-                <tr key={item.id}><td>{item.id}</td><td>{item.sku_interno}</td><td>{item.nombre_normalizado}</td><td>{categorias.find((cat) => cat.id === item.id_categoria)?.nombre || item.id_categoria}</td><td>{item.activo ? "Si" : "No"}</td><td className="rowActions"><button type="button" onClick={() => { setProductoForm({ ...item, id_subcategoria: item.id_subcategoria || "" }); setEditing({ ...editing, producto: item.id }); }}>Editar</button><button type="button" className="danger" onClick={() => softDelete("producto", item.id)}>Desactivar</button></td></tr>
-              ))}
-            </tbody></table>
-          </section>
-        </section>
+        <CategoriasTab
+          categoriaForm={categoriaForm}
+          setCategoriaForm={setCategoriaForm}
+          subcategoriaForm={subcategoriaForm}
+          setSubcategoriaForm={setSubcategoriaForm}
+          editing={editing}
+          setEditing={setEditing}
+          saveCategoria={saveCategoria}
+          saveSubcategoria={saveSubcategoria}
+          loadBaseData={loadBaseData}
+          categorias={categorias}
+          subcategorias={subcategorias}
+        />
       )}
 
       {activeTab === "productosProveedor" && (
-        <section className="grid">
-          <form className="panel" onSubmit={saveProductoProveedor}>
-            <h2>{editing.productoProveedor ? "Editar producto proveedor" : "Nuevo producto proveedor"}</h2>
-            <Field label="Proveedor"><Select value={productoProveedorForm.id_proveedor} onChange={(id_proveedor) => setProductoProveedorForm({ ...productoProveedorForm, id_proveedor })}><option value="">Seleccionar</option>{proveedores.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</Select></Field>
-            <Field label="Producto interno"><Select value={productoProveedorForm.id_producto || ""} onChange={(id_producto) => setProductoProveedorForm({ ...productoProveedorForm, id_producto })}><option value="">Sin vincular</option>{productos.map((item) => <option key={item.id} value={item.id}>{item.sku_interno} - {item.nombre_normalizado}</option>)}</Select></Field>
-            <Field label="SKU proveedor"><TextInput value={productoProveedorForm.sku_producto_proveedor} onChange={(sku_producto_proveedor) => setProductoProveedorForm({ ...productoProveedorForm, sku_producto_proveedor })} /></Field>
-            <Field label="Nombre proveedor"><TextInput value={productoProveedorForm.nombre_producto_proveedor} onChange={(nombre_producto_proveedor) => setProductoProveedorForm({ ...productoProveedorForm, nombre_producto_proveedor })} /></Field>
-            <Field label="Marca"><TextInput value={productoProveedorForm.marca_producto_proveedor} onChange={(marca_producto_proveedor) => setProductoProveedorForm({ ...productoProveedorForm, marca_producto_proveedor })} /></Field>
-            <Field label="Modelo"><TextInput value={productoProveedorForm.modelo_producto_proveedor} onChange={(modelo_producto_proveedor) => setProductoProveedorForm({ ...productoProveedorForm, modelo_producto_proveedor })} /></Field>
-            <Field label="Unidad"><TextInput value={productoProveedorForm.unidad} onChange={(unidad) => setProductoProveedorForm({ ...productoProveedorForm, unidad })} /></Field>
-            <Field label="Precio actual"><TextInput type="number" value={productoProveedorForm.precio_actual} onChange={(precio_actual) => setProductoProveedorForm({ ...productoProveedorForm, precio_actual })} /></Field>
-            <Field label="Moneda"><Select value={productoProveedorForm.moneda_actual || ""} onChange={(moneda_actual) => setProductoProveedorForm({ ...productoProveedorForm, moneda_actual })}><option value="">Sin moneda</option><option>ARS</option><option>USD</option></Select></Field>
-            <Field label="Fecha precio"><TextInput type="datetime-local" value={productoProveedorForm.fecha_precio_actualizada || ""} onChange={(fecha_precio_actualizada) => setProductoProveedorForm({ ...productoProveedorForm, fecha_precio_actualizada })} /></Field>
-            <Checkbox label="Activo" checked={productoProveedorForm.activo} onChange={(activo) => setProductoProveedorForm({ ...productoProveedorForm, activo })} />
-            <Actions><button type="submit">Guardar</button><button type="button" className="secondary" onClick={() => { setProductoProveedorForm(emptyProductoProveedor); setEditing({ ...editing, productoProveedor: null }); }}>Limpiar</button></Actions>
-          </form>
-          <section className="panel wide">
-            <div className="filters">
-              <Field label="Buscar"><TextInput value={filters.buscarProductoProveedor} onChange={(buscarProductoProveedor) => setFilters({ ...filters, buscarProductoProveedor })} /></Field>
-              <Field label="Proveedor"><Select value={filters.idProveedorProducto} onChange={(idProveedorProducto) => setFilters({ ...filters, idProveedorProducto })}><option value="">Todos</option>{proveedores.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</Select></Field>
-              <Checkbox label="Solo pendientes" checked={filters.soloPendientes} onChange={(soloPendientes) => setFilters({ ...filters, soloPendientes })} />
-              <button type="button" onClick={loadProductosProveedor}>Buscar</button>
-            </div>
-            <table><thead><tr><th>ID</th><th>Proveedor</th><th>SKU</th><th>Nombre</th><th>Vinculo</th><th>Precio</th><th></th></tr></thead><tbody>
-              {productosProveedor.map((item) => (
-                <tr key={item.id}><td>{item.id}</td><td>{item.proveedor?.nombre || item.id_proveedor}</td><td>{item.sku_producto_proveedor}</td><td>{item.nombre_producto_proveedor}</td><td>{item.producto?.sku_interno || "-"}</td><td>{formatMoney(item.precio_actual, item.moneda_actual)}</td><td className="rowActions"><button type="button" onClick={() => { setProductoProveedorForm({ ...item, id_producto: item.id_producto || "", fecha_precio_actualizada: item.fecha_precio_actualizada ? item.fecha_precio_actualizada.slice(0, 16) : "" }); setEditing({ ...editing, productoProveedor: item.id }); }}>Editar</button><button type="button" className="secondary" onClick={() => desvincularProducto(item.id)}>Desvincular</button></td></tr>
-              ))}
-            </tbody></table>
-          </section>
-        </section>
+        <ProductosTab
+          productoProveedorForm={productoProveedorForm}
+          setProductoProveedorForm={setProductoProveedorForm}
+          editing={editing}
+          setEditing={setEditing}
+          saveProductoProveedor={saveProductoProveedor}
+          productoProveedorModalOpen={productoProveedorModalOpen}
+          openNuevoProductoModal={openNuevoProductoModal}
+          closeNuevoProductoModal={closeNuevoProductoModal}
+          proveedores={proveedores}
+          categorias={categorias}
+          subcategorias={subcategorias}
+          subcategoriasProductoProveedor={subcategoriasProductoProveedor}
+          filters={filters}
+          setFilters={setFilters}
+          searchProductosProveedor={searchProductosProveedor}
+          productosProveedorMeta={productosProveedorMeta}
+          goProductosPage={goProductosPage}
+          productosProveedor={productosProveedor}
+          openProductoModal={openProductoModal}
+        />
       )}
 
-      {activeTab === "vinculos" && (
-        <section className="grid">
-          <form className="panel" onSubmit={vincularProducto}>
-            <h2>Vincular producto proveedor</h2>
-            <Field label="Producto proveedor"><Select value={linkForm.id_producto_proveedor} onChange={(id_producto_proveedor) => setLinkForm({ ...linkForm, id_producto_proveedor })}><option value="">Seleccionar</option>{productosProveedor.map((item) => <option key={item.id} value={item.id}>{item.sku_producto_proveedor} - {item.nombre_producto_proveedor}</option>)}</Select></Field>
-            <Field label="Producto interno"><Select value={linkForm.id_producto} onChange={(id_producto) => setLinkForm({ ...linkForm, id_producto })}><option value="">Seleccionar</option>{productos.map((item) => <option key={item.id} value={item.id}>{item.sku_interno} - {item.nombre_normalizado}</option>)}</Select></Field>
-            <Actions><button type="submit">Vincular</button><button type="button" className="secondary" onClick={loadProductosProveedor}>Actualizar</button></Actions>
-          </form>
-          <section className="panel wide">
-            <h2>Pendientes</h2>
-            <button type="button" onClick={async () => { setFilters({ ...filters, soloPendientes: true }); await loadProductosProveedor(); }}>Cargar pendientes</button>
-            <table><thead><tr><th>ID</th><th>Proveedor</th><th>SKU</th><th>Nombre</th><th></th></tr></thead><tbody>
-              {(pendientes.length ? pendientes : productosProveedor.filter((item) => !item.id_producto)).map((item) => (
-                <tr key={item.id}><td>{item.id}</td><td>{item.proveedor?.nombre || item.id_proveedor}</td><td>{item.sku_producto_proveedor}</td><td>{item.nombre_producto_proveedor}</td><td><button type="button" onClick={() => setLinkForm({ ...linkForm, id_producto_proveedor: item.id })}>Usar</button></td></tr>
-              ))}
-            </tbody></table>
-          </section>
-        </section>
+      {activeTab === "cotizaciones" && (
+        <CotizacionesTab
+          saveCotizacion={saveCotizacion}
+          cotizacionForm={cotizacionForm}
+          setCotizacionForm={setCotizacionForm}
+          setCotizacionItems={setCotizacionItems}
+          cotizacionResumen={cotizacionResumen}
+          dolarVenta={dolarVenta}
+          addProductoCotizacion={addProductoCotizacion}
+          cotizacionProducto={cotizacionProducto}
+          setCotizacionProducto={setCotizacionProducto}
+          setCotizacionDropdownOpen={setCotizacionDropdownOpen}
+          proveedores={proveedores}
+          productosCotizacion={productosCotizacion}
+          cotizacionDropdownOpen={cotizacionDropdownOpen}
+          productoCotizacionSeleccionado={productoCotizacionSeleccionado}
+          calcularCompraProducto={calcularCompraProducto}
+          addManualCotizacion={addManualCotizacion}
+          cotizacionManual={cotizacionManual}
+          setCotizacionManual={setCotizacionManual}
+          addManoObraCotizacion={addManoObraCotizacion}
+          cotizacionManoObra={cotizacionManoObra}
+          setCotizacionManoObra={setCotizacionManoObra}
+          priceToUsd={priceToUsd}
+          cotizacionItems={cotizacionItems}
+          cotizaciones={cotizaciones}
+          loadCotizaciones={loadCotizaciones}
+          openCotizacion={openCotizacion}
+          printCotizacionById={printCotizacionById}
+        />
       )}
 
       {activeTab === "historial" && (
-        <section className="grid">
-          <form className="panel" onSubmit={loadHistorial}>
-            <h2>Consultar precios</h2>
-            <Field label="Producto proveedor"><Select value={historialId} onChange={setHistorialId}><option value="">Seleccionar</option>{productosProveedor.map((item) => <option key={item.id} value={item.id}>{item.sku_producto_proveedor} - {item.nombre_producto_proveedor}</option>)}</Select></Field>
-            <Actions><button type="submit">Consultar</button></Actions>
-            {ultimoPrecio && <div className="summary"><strong>Ultimo precio</strong><span>{formatMoney(ultimoPrecio.precio, ultimoPrecio.moneda)}</span><small>{formatDate(ultimoPrecio.fecha_actualizada)}</small></div>}
-          </form>
-          <section className="panel wide">
-            <h2>Historial</h2>
-            <table><thead><tr><th>ID</th><th>Precio</th><th>Moneda</th><th>Fecha</th></tr></thead><tbody>
-              {historial.map((item) => <tr key={item.id}><td>{item.id}</td><td>{formatMoney(item.precio, item.moneda)}</td><td>{item.moneda}</td><td>{formatDate(item.fecha_actualizada)}</td></tr>)}
-            </tbody></table>
-          </section>
-        </section>
+        <HistorialPreciosTab
+          loadHistorial={loadHistorial}
+          historialFilters={historialFilters}
+          setHistorialFilters={setHistorialFilters}
+          proveedores={proveedores}
+          productosHistorial={productosHistorial}
+          historialId={historialId}
+          setHistorialId={setHistorialId}
+          historialDropdownOpen={historialDropdownOpen}
+          setHistorialDropdownOpen={setHistorialDropdownOpen}
+          productoHistorialSeleccionado={productoHistorialSeleccionado}
+          ultimoPrecio={ultimoPrecio}
+          historial={historial}
+        />
       )}
 
       {activeTab === "importaciones" && (
-        <section className="grid">
-          <section className="panel">
-            <h2>Importar JSON normalizado</h2>
-            <Field label="Proveedor"><Select value={importProveedorId} onChange={setImportProveedorId}><option value="">Seleccionar</option>{proveedores.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</Select></Field>
-            <textarea className="jsonArea" value={importJson} onChange={(event) => setImportJson(event.target.value)} />
-            <Actions><button type="button" onClick={() => importarJson(true)}>Preview</button><button type="button" onClick={() => importarJson(false)}>Procesar</button></Actions>
-          </section>
-          <section className="panel wide">
-            <h2>Resultado</h2>
-            <pre>{importResult ? JSON.stringify(importResult, null, 2) : "Sin resultado"}</pre>
-          </section>
-        </section>
+        <ImportacionesTab
+          importProveedorId={importProveedorId}
+          setImportProveedorId={setImportProveedorId}
+          proveedores={proveedores}
+          importJson={importJson}
+          setImportJson={setImportJson}
+          importarJson={importarJson}
+          importResult={importResult}
+        />
       )}
+
+      <ProveedorModal
+        proveedorSeleccionado={proveedorSeleccionado}
+        proveedorEdit={proveedorEdit}
+        setProveedorEdit={setProveedorEdit}
+        proveedorEditando={proveedorEditando}
+        setProveedorEditando={setProveedorEditando}
+        closeProveedorModal={closeProveedorModal}
+        cancelProveedorEdit={cancelProveedorEdit}
+        saveProveedorEdit={saveProveedorEdit}
+      />
+
+      <ProductoModal
+        productoSeleccionado={productoSeleccionado}
+        productoEdit={productoEdit}
+        setProductoEdit={setProductoEdit}
+        productoEditando={productoEditando}
+        setProductoEditando={setProductoEditando}
+        closeProductoModal={closeProductoModal}
+        cancelProductoEdit={cancelProductoEdit}
+        saveProductoEdit={saveProductoEdit}
+        proveedores={proveedores}
+        categorias={categorias}
+        subcategoriasProductoEdit={subcategoriasProductoEdit}
+      />
+
+      <CotizacionModal
+        cotizacionSeleccionada={cotizacionSeleccionada}
+        cotizacionEdit={cotizacionEdit}
+        cotizacionEditando={cotizacionEditando}
+        closeCotizacionModal={closeCotizacionModal}
+        updateCotizacionEdit={updateCotizacionEdit}
+        setCotizacionEdit={setCotizacionEdit}
+        itemTotalUsd={itemTotalUsd}
+        cotizacionEditResumen={cotizacionEditResumen}
+        updateCotizacionEditItem={updateCotizacionEditItem}
+        removeCotizacionEditItem={removeCotizacionEditItem}
+        printCotizacion={printCotizacion}
+        cancelCotizacionEdit={cancelCotizacionEdit}
+        saveCotizacionEdit={saveCotizacionEdit}
+        startCotizacionEdit={startCotizacionEdit}
+      />
     </main>
   );
 }
