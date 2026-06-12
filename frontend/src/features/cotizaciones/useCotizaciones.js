@@ -60,12 +60,20 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
     return productosBusqueda.filter((item) => {
       const coincideProveedor =
         !cotizacionProducto.idProveedor || String(item.id_proveedor) === String(cotizacionProducto.idProveedor);
+      const coincideCategoria =
+        !cotizacionProducto.idCategoria || String(item.id_categoria) === String(cotizacionProducto.idCategoria);
+      const coincideSubcategoria =
+        !cotizacionProducto.idSubcategoria || String(item.id_subcategoria) === String(cotizacionProducto.idSubcategoria);
+      const proveedorActivo = item.proveedor?.activo !== false;
+      const coincideTipo =
+        !cotizacionForm.tipo ||
+        (item.proveedor?.tipos || []).includes(cotizacionForm.tipo);
       const texto = normalizeSearch(
         `${item.sku_producto_proveedor} ${item.nombre_producto_proveedor} ${item.proveedor?.nombre || ""}`,
       );
-      return coincideProveedor && (!buscar || texto.includes(buscar));
+      return proveedorActivo && coincideProveedor && coincideCategoria && coincideSubcategoria && coincideTipo && (!buscar || texto.includes(buscar));
     });
-  }, [cotizacionProducto, productosBusqueda]);
+  }, [cotizacionProducto, cotizacionForm, productosBusqueda]);
 
   const productoCotizacionSeleccionado = useMemo(
     () => productosBusqueda.find((item) => String(item.id) === String(cotizacionProducto.idProducto)),

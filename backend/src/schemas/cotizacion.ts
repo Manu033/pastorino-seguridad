@@ -13,7 +13,7 @@ const cotizacionItemSchema = z.object({
 });
 
 export const cotizacionCreateSchema = z.object({
-  tipo: z.enum(["EXTINCION", "DETECCION"]).default("EXTINCION"),
+  tipo: z.enum(["EXTINCION", "DETECCION", "SALA_BOMBAS"]).default("EXTINCION"),
   titulo: z.string().trim().min(1).max(180),
   cliente: optionalText(180),
   contacto_cliente: optionalText(180),

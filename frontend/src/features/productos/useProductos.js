@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { request } from "../../api/client.js";
 import { emptyProductoProveedor } from "../../constants/forms.js";
 import { cleanText, toNumberOrNull } from "../../utils/format.js";
@@ -82,6 +82,22 @@ export function useProductos({ apiUrl, run, setError, subcategorias, loadProduct
     setProductosPage(1);
     loadProductosProveedor(1);
   }
+
+  const isFirstRender = useRef(true);
+  const debounceTimer = useRef(null);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      setProductosPage(1);
+      loadProductosProveedor(1);
+    }, 350);
+    return () => clearTimeout(debounceTimer.current);
+  }, [filters]);
 
   function goProductosPage(page) {
     const nextPage = Math.min(Math.max(page, 1), productosProveedorMeta.totalPages || 1);

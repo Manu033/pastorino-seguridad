@@ -9,6 +9,7 @@ function proveedorPayload(form) {
     email_contacto: cleanText(form.email_contacto),
     telefono: cleanText(form.telefono),
     tipo_fuente: form.tipo_fuente,
+    tipos: form.tipos || [],
     activo: Boolean(form.activo),
   };
 }

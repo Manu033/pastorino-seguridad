@@ -7,6 +7,7 @@ import {
   Check,
   ClipboardList,
   FileText,
+  Droplets,
   Flame,
   Hammer,
   PackageSearch,
@@ -20,7 +21,7 @@ import { emptyCotizacionForm } from "../../constants/forms.js";
 import { formatDate, formatMoney, toNumber } from "../../utils/format.js";
 
 type Moneda = "USD" | "ARS";
-type TipoCotizacion = "EXTINCION" | "DETECCION";
+type TipoCotizacion = "EXTINCION" | "DETECCION" | "SALA_BOMBAS";
 type ItemGrupo = "MATERIAL" | "MANO_OBRA";
 
 type CotizacionForm = {
@@ -58,15 +59,19 @@ type CotizacionItem = {
 type Producto = {
   id: number;
   id_proveedor: number;
+  id_categoria?: number | null;
+  id_subcategoria?: number | null;
   sku_producto_proveedor: string;
   nombre_producto_proveedor: string;
   unidad?: string | null;
   precio_actual?: string | number | null;
   moneda_actual?: Moneda | null;
-  proveedor?: { id: number; nombre: string };
+  proveedor?: { id: number; nombre: string; tipos: TipoCotizacion[] };
 };
 
-type Proveedor = { id: number; nombre: string };
+type Proveedor = { id: number; nombre: string; tipos: TipoCotizacion[] };
+type Categoria = { id: number; nombre: string };
+type Subcategoria = { id: number; id_categoria: number; nombre: string };
 type CotizacionGuardada = {
   id: number;
   titulo: string;
@@ -83,9 +88,11 @@ type Props = {
   setCotizacionForm: React.Dispatch<React.SetStateAction<CotizacionForm>>;
   setCotizacionItems: React.Dispatch<React.SetStateAction<CotizacionItem[]>>;
   dolarVenta: number;
-  cotizacionProducto: { idProveedor?: string; buscar?: string };
+  cotizacionProducto: { idProveedor?: string; buscar?: string; idCategoria?: string; idSubcategoria?: string };
   setCotizacionProducto: React.Dispatch<React.SetStateAction<any>>;
   proveedores: Proveedor[];
+  categorias: Categoria[];
+  subcategorias: Subcategoria[];
   productosCotizacion: Producto[];
   cotizacionItems: CotizacionItem[];
   cotizaciones: CotizacionGuardada[];
@@ -186,24 +193,21 @@ function Step1Form({
     <section className="grid gap-4">
       <DarkPanel title="Tipo de cotizacion" icon={<FileText size={15} />}>
         <div className="quoteTypeCards">
-          {[
+          {([
             ["EXTINCION", "Extincion", Flame],
             ["DETECCION", "Deteccion", Wrench],
-          ].map(([id, label, Icon]) => {
-            const disabled = id !== "EXTINCION";
-            return (
-              <button
-                key={id as string}
-                type="button"
-                disabled={disabled}
-                className={`quoteTypeCard ${form.tipo === id ? "active" : ""}`}
-                onClick={() => update("tipo", id as TipoCotizacion)}
-              >
-                {typeof Icon !== "string" && <Icon size={17} />}
-                <strong className="text-xs">{label}</strong>
-              </button>
-            );
-          })}
+            ["SALA_BOMBAS", "Sala de bombas", Droplets],
+          ] as [TipoCotizacion, string, React.ElementType][]).map(([id, label, Icon]) => (
+            <button
+              key={id}
+              type="button"
+              className={`quoteTypeCard ${form.tipo === id ? "active" : ""}`}
+              onClick={() => update("tipo", id)}
+            >
+              <Icon size={17} />
+              <strong className="text-xs">{label}</strong>
+            </button>
+          ))}
         </div>
       </DarkPanel>
 
@@ -299,6 +303,8 @@ function Step2Items({
   form,
   setForm,
   proveedores,
+  categorias,
+  subcategorias,
   productosCotizacion,
   cotizacionProducto,
   setCotizacionProducto,
@@ -310,8 +316,10 @@ function Step2Items({
   form: CotizacionForm;
   setForm: React.Dispatch<React.SetStateAction<CotizacionForm>>;
   proveedores: Proveedor[];
+  categorias: Categoria[];
+  subcategorias: Subcategoria[];
   productosCotizacion: Producto[];
-  cotizacionProducto: { idProveedor?: string; buscar?: string };
+  cotizacionProducto: { idProveedor?: string; buscar?: string; idCategoria?: string; idSubcategoria?: string };
   setCotizacionProducto: React.Dispatch<React.SetStateAction<any>>;
   items: CotizacionItem[];
   setItems: React.Dispatch<React.SetStateAction<CotizacionItem[]>>;
@@ -426,34 +434,86 @@ function Step2Items({
         {activeTab === "productos" && (
           <div className="quoteAddPanel">
             <div className="quotePanelTitle"><PackageSearch size={15} /><span>Agregar producto del catalogo</span></div>
+
+            {/* Category nav */}
+            {(() => {
+              const categoriasConProductos = categorias.filter((c) =>
+                productosCotizacion.some((p) => String(p.id_categoria) === String(c.id))
+              );
+              const subcategoriasDisponibles = subcategorias.filter((s) =>
+                String(s.id_categoria) === String(cotizacionProducto.idCategoria) &&
+                productosCotizacion.some((p) => String(p.id_subcategoria) === String(s.id))
+              );
+              return (
+                <div className="quoteCategoryNav">
+                  <div className="quoteCategoryRow">
+                    <button
+                      type="button"
+                      className={`quoteCategoryChip ${!cotizacionProducto.idCategoria ? "active" : ""}`}
+                      onClick={() => setCotizacionProducto((c: any) => ({ ...c, idCategoria: "", idSubcategoria: "", buscar: "" }))}
+                    >
+                      Todas
+                    </button>
+                    {categoriasConProductos.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        className={`quoteCategoryChip ${String(cotizacionProducto.idCategoria) === String(cat.id) ? "active" : ""}`}
+                        onClick={() => setCotizacionProducto((c: any) => ({ ...c, idCategoria: String(cat.id), idSubcategoria: "", buscar: "" }))}
+                      >
+                        {cat.nombre}
+                      </button>
+                    ))}
+                  </div>
+                  {cotizacionProducto.idCategoria && subcategoriasDisponibles.length > 0 && (
+                    <div className="quoteCategoryRow quoteCategorySubrow">
+                      <button
+                        type="button"
+                        className={`quoteCategoryChip sub ${!cotizacionProducto.idSubcategoria ? "active" : ""}`}
+                        onClick={() => setCotizacionProducto((c: any) => ({ ...c, idSubcategoria: "", buscar: "" }))}
+                      >
+                        Todas
+                      </button>
+                      {subcategoriasDisponibles.map((sub) => (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          className={`quoteCategoryChip sub ${String(cotizacionProducto.idSubcategoria) === String(sub.id) ? "active" : ""}`}
+                          onClick={() => setCotizacionProducto((c: any) => ({ ...c, idSubcategoria: String(sub.id), buscar: "" }))}
+                        >
+                          {sub.nombre}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Search + quantity row */}
             <div className="quoteProductFormGrid">
-            <LabeledInput label="Proveedor">
-              <select className={fieldBase()} value={cotizacionProducto.idProveedor || ""} onChange={(event) => setCotizacionProducto({ idProveedor: event.target.value, buscar: "" })}>
-                <option value="">Todos</option>
-                {proveedores.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
-              </select>
-            </LabeledInput>
-            <LabeledInput label="Producto / SKU">
-              <input className={fieldBase()} value={cotizacionProducto.buscar || ""} placeholder="Buscar SKU, producto o proveedor" onChange={(event) => setCotizacionProducto((current: any) => ({ ...current, buscar: event.target.value }))} />
-            </LabeledInput>
-            <LabeledInput label="Cantidad">
-              <input className={fieldBase()} type="number" min="0" value={productoForm.cantidad} onChange={(event) => setProductoForm((current) => ({ ...current, cantidad: event.target.value }))} />
-            </LabeledInput>
-            <LabeledInput label="Precio unitario">
-              <input className={fieldBase()} type="number" min="0" value={productoForm.precio_unitario} onChange={(event) => setProductoForm((current) => ({ ...current, precio_unitario: event.target.value }))} />
-            </LabeledInput>
-            <LabeledInput label="Moneda">
-              <select className={fieldBase()} value={productoForm.moneda} onChange={(event) => setProductoForm((current) => ({ ...current, moneda: event.target.value as Moneda }))}>
-                <option>USD</option>
-                <option>ARS</option>
-              </select>
-            </LabeledInput>
-            <div className="quoteAddButtonSlot">
-              <button type="button" className="quoteBtn quoteBtnPrimary" onClick={addProducto}><Plus size={16} />Agregar</button>
+              <LabeledInput label="Buscar en categoria">
+                <input className={fieldBase()} value={cotizacionProducto.buscar || ""} placeholder="SKU o nombre..." onChange={(event) => setCotizacionProducto((current: any) => ({ ...current, buscar: event.target.value }))} />
+              </LabeledInput>
+              <LabeledInput label="Cantidad">
+                <input className={fieldBase()} type="number" min="0" value={productoForm.cantidad} onChange={(event) => setProductoForm((current) => ({ ...current, cantidad: event.target.value }))} />
+              </LabeledInput>
+              <LabeledInput label="Precio unitario">
+                <input className={fieldBase()} type="number" min="0" value={productoForm.precio_unitario} onChange={(event) => setProductoForm((current) => ({ ...current, precio_unitario: event.target.value }))} disabled />
+              </LabeledInput>
+              <LabeledInput label="Moneda">
+                <select className={fieldBase()} value={productoForm.moneda} onChange={(event) => setProductoForm((current) => ({ ...current, moneda: event.target.value as Moneda }))} disabled>
+                  <option>USD</option>
+                  <option>ARS</option>
+                </select>
+              </LabeledInput>
+              <div className="quoteAddButtonSlot">
+                <button type="button" className="quoteBtn quoteBtnPrimary" onClick={addProducto}><Plus size={16} />Agregar</button>
+              </div>
             </div>
-            </div>
+
             <div className="quoteProductResults">
-              {productosCotizacion.slice(0, 12).map((item) => (
+              {productosCotizacion.slice(0, 20).map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -465,7 +525,6 @@ function Step2Items({
                       precio_unitario: String(item.precio_actual || ""),
                       moneda: item.moneda_actual || "USD",
                     });
-                    setCotizacionProducto((current: any) => ({ ...current, buscar: `${item.sku_producto_proveedor} - ${item.nombre_producto_proveedor}` }));
                   }}
                 >
                   <span className="quoteProductSku">{item.sku_producto_proveedor}</span>
@@ -711,8 +770,8 @@ const PreviewDocument = React.forwardRef<HTMLDivElement, {
 
   return (
     <article ref={ref} className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm print:rounded-none print:border-0 print:shadow-none">
-      <header className="flex flex-wrap items-start justify-between gap-6 bg-slate-950 p-8 text-white">
-        <div>
+      <header className="flex flex-wrap items-start justify-between gap-6 bg-slate-950 p-8 text-white ">
+        <div >
           <div className="mb-3 grid h-12 w-12 place-items-center rounded-xl bg-white/10"><Building2 size={24} /></div>
           <h1 className="!m-0 text-2xl font-extrabold">Pastorino Seguridad</h1>
           <p className="!m-0 mt-1 text-sm text-slate-300">Cotizacion tecnica comercial</p>
@@ -835,6 +894,8 @@ export function CotizacionesTab({
   cotizacionProducto,
   setCotizacionProducto,
   proveedores,
+  categorias,
+  subcategorias,
   productosCotizacion,
   cotizacionItems,
   cotizaciones,
@@ -924,6 +985,8 @@ export function CotizacionesTab({
           form={form}
           setForm={setCotizacionForm}
           proveedores={proveedores}
+          categorias={categorias}
+          subcategorias={subcategorias}
           productosCotizacion={productosCotizacion}
           cotizacionProducto={cotizacionProducto}
           setCotizacionProducto={setCotizacionProducto}

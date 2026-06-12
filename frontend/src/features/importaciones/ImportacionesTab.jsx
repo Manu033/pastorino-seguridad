@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Actions, Field, Select } from "../../components/ui.jsx";
-import { PROMPT_EXTRACCION_PRECIOS } from "../../constants/forms.js";
+import { PROMPT_EXTRACCION_PRECIOS, sampleImport } from "../../constants/forms.js";
 
 export function ImportacionesTab({ importProveedorId, setImportProveedorId, proveedores, importJson, setImportJson, importarJson, importResult }) {
   const [copied, setCopied] = useState(false);
@@ -24,7 +24,7 @@ export function ImportacionesTab({ importProveedorId, setImportProveedorId, prov
           {" "}y pegalo junto con tu archivo en Claude.ai o ChatGPT.
         </p>
         <Field label="Proveedor"><Select value={importProveedorId} onChange={setImportProveedorId}><option value="">Seleccionar</option>{proveedores.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</Select></Field>
-        <textarea className="jsonArea" value={importJson} onChange={(event) => setImportJson(event.target.value)} />
+        <textarea className="jsonArea" value={importJson} placeholder={sampleImport} onChange={(event) => setImportJson(event.target.value)} />
         <Actions><button type="button" onClick={() => importarJson(true)}>Preview</button><button type="button" onClick={() => importarJson(false)}>Procesar</button></Actions>
       </section>
       <section className="panel wide">

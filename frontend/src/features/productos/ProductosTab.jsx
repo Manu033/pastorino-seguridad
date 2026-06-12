@@ -104,7 +104,6 @@ export function ProductosTab({
           <Field label="Proveedor"><Select value={filters.idProveedorProducto} onChange={(idProveedorProducto) => setFilters({ ...filters, idProveedorProducto })}><option value="">Todos</option>{proveedores.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</Select></Field>
           <Field label="Categoria"><Select value={filters.idCategoriaProducto} onChange={(idCategoriaProducto) => setFilters({ ...filters, idCategoriaProducto, idSubcategoriaProducto: "" })}><option value="">Todas</option>{categorias.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</Select></Field>
           <Field label="Subcategoria"><Select value={filters.idSubcategoriaProducto} onChange={(idSubcategoriaProducto) => setFilters({ ...filters, idSubcategoriaProducto })}><option value="">Todas</option>{subcategorias.filter((item) => !filters.idCategoriaProducto || String(item.id_categoria) === String(filters.idCategoriaProducto)).map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</Select></Field>
-          <button type="button" onClick={searchProductosProveedor}>Buscar</button>
         </div>
         <div className="pagination">
           <span>{productosProveedorMeta.total} productos · Pagina {productosProveedorMeta.page} de {productosProveedorMeta.totalPages}</span>

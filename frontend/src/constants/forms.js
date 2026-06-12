@@ -1,7 +1,8 @@
 export const API_DEFAULT = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
 export const DOLAR_OFICIAL_URL = "https://dolarapi.com/v1/dolares/oficial";
 
-export const emptyProveedor = { nombre: "", email_contacto: "", telefono: "", tipo_fuente: "MANUAL", activo: true };
+export const emptyProveedor = { nombre: "", email_contacto: "", telefono: "", tipo_fuente: "MANUAL", tipos: ["EXTINCION", "DETECCION", "SALA_BOMBAS"], activo: true };
+export const TIPO_LABELS = { DETECCION: "Deteccion", EXTINCION: "Extincion", SALA_BOMBAS: "Sala de bombas" };
 export const emptyCategoria = { nombre: "" };
 export const emptySubcategoria = { id_categoria: "", nombre: "" };
 export const emptyProductoProveedor = {
@@ -42,7 +43,7 @@ export const emptyCotizacionForm = {
   aplica_costos_varios: false,
   porcentaje_costos_varios: "5",
 };
-export const emptyCotizacionProducto = { buscar: "", idProveedor: "", idProducto: "", cantidad: "1" };
+export const emptyCotizacionProducto = { buscar: "", idProveedor: "", idProducto: "", idCategoria: "", idSubcategoria: "", cantidad: "1" };
 export const emptyCotizacionManual = { descripcion: "", cantidad: "1", unidad: "", precio_unitario: "", moneda: "ARS" };
 export const emptyCotizacionManoObra = { personas: "1", dias: "1", precio_unitario: "", moneda: "ARS" };
 

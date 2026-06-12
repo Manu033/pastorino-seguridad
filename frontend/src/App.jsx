@@ -211,6 +211,8 @@ function App() {
           setCotizacionProducto={cotizaciones.setCotizacionProducto}
           setCotizacionDropdownOpen={cotizaciones.setCotizacionDropdownOpen}
           proveedores={baseData.proveedores}
+          categorias={baseData.categorias}
+          subcategorias={baseData.subcategorias}
           productosCotizacion={cotizaciones.productosCotizacion}
           cotizacionDropdownOpen={cotizaciones.cotizacionDropdownOpen}
           productoCotizacionSeleccionado={cotizaciones.productoCotizacionSeleccionado}

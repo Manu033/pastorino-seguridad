@@ -16,3 +16,4 @@ export const optionalText = (max: number) =>
 
 export const monedaSchema = z.enum(["ARS", "USD"]);
 export const tipoFuenteSchema = z.enum(["EXCEL", "PDF", "API", "MANUAL"]);
+export const tipoCotizacionSchema = z.enum(["EXTINCION", "DETECCION", "SALA_BOMBAS"]);

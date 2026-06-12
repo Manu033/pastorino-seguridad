@@ -4,7 +4,7 @@ import { sampleImport } from "../../constants/forms.js";
 
 export function useImportaciones({ apiUrl, run, loadProductosBusqueda, loadProductosProveedor }) {
   const [importProveedorId, setImportProveedorId] = useState("");
-  const [importJson, setImportJson] = useState(sampleImport);
+  const [importJson, setImportJson] = useState("");
   const [importResult, setImportResult] = useState(null);
 
   async function importarJson(preview) {

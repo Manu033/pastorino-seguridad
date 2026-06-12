@@ -1,5 +1,12 @@
 import React from "react";
 import { Checkbox, Field, Select, TextInput } from "../../components/ui.jsx";
+import { TIPO_LABELS } from "../../constants/forms.js";
+
+const TIPOS = ["EXTINCION", "DETECCION", "SALA_BOMBAS"];
+
+function toggleTipo(tipos, tipo) {
+  return tipos.includes(tipo) ? tipos.filter((t) => t !== tipo) : [...tipos, tipo];
+}
 
 export function ProveedorModal({
   proveedorSeleccionado,
@@ -34,12 +41,25 @@ export function ProveedorModal({
                 <option>MANUAL</option><option>EXCEL</option><option>PDF</option><option>API</option>
               </Select>
             </Field>
+            <Field label="Tipos">
+              <div className="checkGroup">
+                {TIPOS.map((t) => (
+                  <Checkbox
+                    key={t}
+                    label={TIPO_LABELS[t]}
+                    checked={(proveedorEdit.tipos || []).includes(t)}
+                    onChange={() => setProveedorEdit({ ...proveedorEdit, tipos: toggleTipo(proveedorEdit.tipos || [], t) })}
+                  />
+                ))}
+              </div>
+            </Field>
             <Checkbox label="Activo" checked={proveedorEdit.activo} onChange={(activo) => setProveedorEdit({ ...proveedorEdit, activo })} />
           </div>
         ) : (
           <div className="quoteMeta">
             <div><strong>Nombre</strong><span>{proveedorSeleccionado.nombre}</span></div>
             <div><strong>Fuente</strong><span>{proveedorSeleccionado.tipo_fuente}</span></div>
+            <div><strong>Tipos</strong><span>{(proveedorSeleccionado.tipos || []).map((t) => TIPO_LABELS[t] ?? t).join(", ")}</span></div>
             <div><strong>Email</strong><span>{proveedorSeleccionado.email_contacto || "-"}</span></div>
             <div><strong>Telefono</strong><span>{proveedorSeleccionado.telefono || "-"}</span></div>
             <div><strong>Activo</strong><span>{proveedorSeleccionado.activo ? "Si" : "No"}</span></div>

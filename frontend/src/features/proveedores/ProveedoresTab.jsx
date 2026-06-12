@@ -1,5 +1,12 @@
 import React from "react";
 import { Actions, Checkbox, Field, Select, TextInput } from "../../components/ui.jsx";
+import { TIPO_LABELS } from "../../constants/forms.js";
+
+const TIPOS = ["EXTINCION", "DETECCION", "SALA_BOMBAS"];
+
+function toggleTipo(tipos, tipo) {
+  return tipos.includes(tipo) ? tipos.filter((t) => t !== tipo) : [...tipos, tipo];
+}
 
 function ProveedorForm({ proveedorForm, setProveedorForm, saveProveedor, onCancel }) {
   return (
@@ -12,6 +19,18 @@ function ProveedorForm({ proveedorForm, setProveedorForm, saveProveedor, onCance
           <Select value={proveedorForm.tipo_fuente} onChange={(tipo_fuente) => setProveedorForm({ ...proveedorForm, tipo_fuente })}>
             <option>MANUAL</option><option>EXCEL</option><option>PDF</option><option>API</option>
           </Select>
+        </Field>
+        <Field label="Tipos">
+          <div className="checkGroup">
+            {TIPOS.map((t) => (
+              <Checkbox
+                key={t}
+                label={TIPO_LABELS[t]}
+                checked={(proveedorForm.tipos || []).includes(t)}
+                onChange={() => setProveedorForm({ ...proveedorForm, tipos: toggleTipo(proveedorForm.tipos || [], t) })}
+              />
+            ))}
+          </div>
         </Field>
         <Checkbox label="Activo" checked={proveedorForm.activo} onChange={(activo) => setProveedorForm({ ...proveedorForm, activo })} />
       </div>
@@ -67,15 +86,15 @@ export function ProveedoresTab({
         <div className="panelHead">
           <h2>Proveedores</h2>
           <div className="rowActions">
-            <Checkbox label="Incluir inactivos" checked={filters.incluirInactivos} onChange={(incluirInactivos) => setFilters({ ...filters, incluirInactivos })} />
-            <button type="button" className="secondary" onClick={loadBaseData}>Actualizar</button>
+            <Checkbox label="Incluir inactivos" checked={filters.incluirInactivos} onChange={(incluirInactivos) => { const next = { ...filters, incluirInactivos }; setFilters(next); loadBaseData(next); }} />
+            <button type="button" className="secondary" onClick={() => loadBaseData(filters)}>Actualizar</button>
             <button type="button" onClick={openNuevoProveedorModal}>Nuevo proveedor</button>
           </div>
         </div>
-        <table><thead><tr><th>ID</th><th>Nombre</th><th>Fuente</th><th>Contacto</th><th>Activo</th><th></th></tr></thead><tbody>
+        <table><thead><tr><th>ID</th><th>Nombre</th><th>Fuente</th><th>Tipo</th><th>Contacto</th><th>Activo</th><th></th></tr></thead><tbody>
           {proveedores.map((item) => (
             <tr key={item.id}>
-              <td>{item.id}</td><td>{item.nombre}</td><td>{item.tipo_fuente}</td><td>{item.email_contacto || item.telefono || "-"}</td><td>{item.activo ? "Si" : "No"}</td>
+              <td>{item.id}</td><td>{item.nombre}</td><td>{item.tipo_fuente}</td><td>{(item.tipos || []).map((t) => TIPO_LABELS[t] ?? t).join(", ")}</td><td>{item.email_contacto || item.telefono || "-"}</td><td>{item.activo ? "Si" : "No"}</td>
               <td className="rowActions">
                 <button type="button" onClick={() => openProveedorModal(item)}>Ver</button>
                 <button type="button" className="danger" onClick={() => softDelete("proveedor", item.id)}>Desactivar</button>
