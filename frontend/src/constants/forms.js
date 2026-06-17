@@ -47,6 +47,9 @@ export const emptyCotizacionProducto = { buscar: "", idProveedor: "", idProducto
 export const emptyCotizacionManual = { descripcion: "", cantidad: "1", unidad: "", precio_unitario: "", moneda: "ARS" };
 export const emptyCotizacionManoObra = { personas: "1", dias: "1", precio_unitario: "", moneda: "ARS" };
 
+export const emptyCompuestoForm = { nombre: "", descripcion: "" };
+export const emptyCompuestoItemForm = { tipo: "PRODUCTO", idProducto: "", buscar: "", descripcion: "", cantidad: "1", unidad: "", precio_unitario: "", moneda: "USD" };
+
 export const PROMPT_EXTRACCION_PRECIOS = `Sos un asistente de extracción de datos para una empresa de seguridad contra incendios.
 El archivo adjunto es una lista de precios de un proveedor.
 

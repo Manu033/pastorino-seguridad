@@ -58,6 +58,13 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
   const productosCotizacion = useMemo(() => {
     const buscar = normalizeSearch(cotizacionProducto.buscar);
     return productosBusqueda.filter((item) => {
+      // Composite products: only filter by text search, ignore proveedor/categoria/tipo filters
+      if (item._tipo === "COMPUESTO") {
+        if (item.activo === false) return false;
+        if (!buscar) return true;
+        return normalizeSearch(item.nombre || "").includes(buscar);
+      }
+      // Regular products
       const coincideProveedor =
         !cotizacionProducto.idProveedor || String(item.id_proveedor) === String(cotizacionProducto.idProveedor);
       const coincideCategoria =
@@ -67,7 +74,9 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
       const proveedorActivo = item.proveedor?.activo !== false;
       const coincideTipo =
         !cotizacionForm.tipo ||
-        (item.proveedor?.tipos || []).includes(cotizacionForm.tipo);
+        !item.proveedor?.tipo ||
+        item.proveedor.tipo === "AMBOS" ||
+        item.proveedor.tipo === cotizacionForm.tipo;
       const texto = normalizeSearch(
         `${item.sku_producto_proveedor} ${item.nombre_producto_proveedor} ${item.proveedor?.nombre || ""}`,
       );

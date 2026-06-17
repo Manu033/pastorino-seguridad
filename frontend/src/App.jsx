@@ -20,6 +20,7 @@ import { useCotizaciones } from "./features/cotizaciones/useCotizaciones.js";
 import { useImportaciones } from "./features/importaciones/useImportaciones.js";
 import { useHistorial } from "./features/precios/useHistorial.js";
 import { useProductos } from "./features/productos/useProductos.js";
+import { useProductosCompuestos } from "./features/productos/useProductosCompuestos.js";
 import { ClasificacionTab } from "./features/clasificacion/ClasificacionTab.jsx";
 import { useClasificacion } from "./features/clasificacion/useClasificacion.js";
 import { useProveedores } from "./features/proveedores/useProveedores.js";
@@ -85,6 +86,13 @@ function App() {
     subcategorias: baseData.subcategorias,
   });
 
+  const compuestos = useProductosCompuestos({
+    apiUrl: app.apiUrl,
+    run: app.run,
+    setError: app.setError,
+    loadProductosBusqueda: busqueda.loadProductosBusqueda,
+  });
+
   const importaciones = useImportaciones({
     apiUrl: app.apiUrl,
     run: app.run,
@@ -97,6 +105,7 @@ function App() {
     productos.loadProductosProveedor();
     busqueda.loadProductosBusqueda();
     cotizaciones.loadCotizaciones();
+    compuestos.loadCompuestos();
     health.checkHealth(app.apiUrl, app.run);
     health.loadDolarOficial();
   }, []);
@@ -173,6 +182,21 @@ function App() {
           goProductosPage={productos.goProductosPage}
           productosProveedor={productos.productosProveedor}
           openProductoModal={productos.openProductoModal}
+          compuestos={compuestos.compuestos}
+          compuestoForm={compuestos.compuestoForm}
+          setCompuestoForm={compuestos.setCompuestoForm}
+          compuestoItems={compuestos.compuestoItems}
+          compuestoItemForm={compuestos.compuestoItemForm}
+          setCompuestoItemForm={compuestos.setCompuestoItemForm}
+          compuestoModalOpen={compuestos.compuestoModalOpen}
+          editingCompuesto={compuestos.editingCompuesto}
+          saveCompuesto={compuestos.saveCompuesto}
+          addItemToCompuesto={compuestos.addItemToCompuesto}
+          removeItemFromCompuesto={compuestos.removeItemFromCompuesto}
+          openNuevoCompuestoModal={compuestos.openNuevoCompuestoModal}
+          openEditCompuestoModal={compuestos.openEditCompuestoModal}
+          closeCompuestoModal={compuestos.closeCompuestoModal}
+          productosBusqueda={busqueda.productosBusqueda}
         />
       )}
 
@@ -195,6 +219,15 @@ function App() {
           limpiarCategoria={clasificacion.limpiarCategoria}
           proveedores={baseData.proveedores}
           categorias={baseData.categorias}
+          productoEditar={clasificacion.productoEditar}
+          abrirModalEditar={clasificacion.abrirModalEditar}
+          cerrarModalEditar={clasificacion.cerrarModalEditar}
+          categoriaEditar={clasificacion.categoriaEditar}
+          setCategoriaEditar={clasificacion.setCategoriaEditar}
+          subcategoriaEditar={clasificacion.subcategoriaEditar}
+          setSubcategoriaEditar={clasificacion.setSubcategoriaEditar}
+          subcategoriasEditar={clasificacion.subcategoriasEditar}
+          guardarEdicion={clasificacion.guardarEdicion}
         />
       )}
 

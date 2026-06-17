@@ -342,9 +342,65 @@ function Step2Items({
   function addProducto() {
     if (!selectedProduct) return setError("Selecciona un producto del catalogo");
     const cantidad = toNumber(productoForm.cantidad);
+    if (cantidad <= 0) return setError("La cantidad debe ser mayor a cero");
+
+    const product = selectedProduct as any;
+
+    // Handle composite product — expand into individual items
+    if (product._tipo === "COMPUESTO") {
+      const compItems: any[] = product.items || [];
+      if (!compItems.length) return setError("El compuesto no tiene items configurados");
+
+      const newItems: CotizacionItem[] = [];
+      for (const ci of compItems) {
+        const cantidadFinal = toNumber(ci.cantidad) * cantidad;
+        if (ci.tipo === "PRODUCTO" && ci.producto_proveedor) {
+          const prod = ci.producto_proveedor;
+          const precio = toNumber(prod.precio_actual);
+          const moneda = (prod.moneda_actual || "USD") as Moneda;
+          if (!precio) continue;
+          if (moneda === "ARS" && !dolarVenta) return setError("No hay cotizacion de dolar disponible para convertir ARS");
+          newItems.push({
+            localId: crypto.randomUUID(),
+            id_producto_proveedor: prod.id,
+            tipo: "PRODUCTO",
+            grupo: "MATERIAL",
+            descripcion: `${prod.sku_producto_proveedor} - ${prod.nombre_producto_proveedor}`,
+            cantidad: cantidadFinal,
+            unidad: ci.unidad || prod.unidad || "",
+            precio_unitario: precio,
+            moneda,
+            total_usd: toUsd(cantidadFinal * precio, moneda, dolarVenta),
+          });
+        } else if (ci.tipo === "MANUAL") {
+          const precio = toNumber(ci.precio_unitario);
+          const moneda = (ci.moneda || "USD") as Moneda;
+          if (moneda === "ARS" && !dolarVenta) return setError("No hay cotizacion de dolar disponible para convertir ARS");
+          newItems.push({
+            localId: crypto.randomUUID(),
+            id_producto_proveedor: null,
+            tipo: "MANUAL",
+            grupo: "MATERIAL",
+            descripcion: ci.descripcion,
+            cantidad: cantidadFinal,
+            unidad: ci.unidad || "",
+            precio_unitario: precio,
+            moneda,
+            total_usd: toUsd(cantidadFinal * precio, moneda, dolarVenta),
+          });
+        }
+      }
+      if (!newItems.length) return setError("No se pudieron agregar items del compuesto (verifique que tengan precio)");
+      newItems.forEach(pushItem);
+      setProductoForm({ idProducto: "", cantidad: "1", precio_unitario: "", moneda: "USD" });
+      setCotizacionProducto((current: any) => ({ ...current, buscar: "" }));
+      return;
+    }
+
+    // Regular product
     const precio = toNumber(productoForm.precio_unitario || selectedProduct.precio_actual);
-    const moneda = productoForm.moneda || selectedProduct.moneda_actual || "USD";
-    if (cantidad <= 0 || precio < 0) return setError("Cantidad y precio unitario son requeridos");
+    const moneda = (productoForm.moneda || selectedProduct.moneda_actual || "USD") as Moneda;
+    if (precio < 0) return setError("Precio unitario invalido");
     if (moneda === "ARS" && !dolarVenta) return setError("No hay cotizacion de dolar disponible para convertir ARS");
 
     pushItem({
@@ -493,7 +549,7 @@ function Step2Items({
             {/* Search + quantity row */}
             <div className="quoteProductFormGrid">
               <LabeledInput label="Buscar en categoria">
-                <input className={fieldBase()} value={cotizacionProducto.buscar || ""} placeholder="SKU o nombre..." onChange={(event) => setCotizacionProducto((current: any) => ({ ...current, buscar: event.target.value }))} />
+                <input className={fieldBase()} value={cotizacionProducto.buscar || ""} placeholder="SKU, nombre o proveedor..." onChange={(event) => setCotizacionProducto((current: any) => ({ ...current, buscar: event.target.value }))} />
               </LabeledInput>
               <LabeledInput label="Cantidad">
                 <input className={fieldBase()} type="number" min="0" value={productoForm.cantidad} onChange={(event) => setProductoForm((current) => ({ ...current, cantidad: event.target.value }))} />
@@ -513,25 +569,38 @@ function Step2Items({
             </div>
 
             <div className="quoteProductResults">
-              {productosCotizacion.slice(0, 20).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`quoteProductResult ${String(productoForm.idProducto) === String(item.id) ? "selected" : ""}`}
-                  onClick={() => {
-                    setProductoForm({
-                      idProducto: String(item.id),
-                      cantidad: productoForm.cantidad,
-                      precio_unitario: String(item.precio_actual || ""),
-                      moneda: item.moneda_actual || "USD",
-                    });
-                  }}
-                >
-                  <span className="quoteProductSku">{item.sku_producto_proveedor}</span>
-                  <span className="quoteProductName">{item.nombre_producto_proveedor}</span>
-                  <span className="quoteProductMeta">{item.proveedor?.nombre || "Sin proveedor"} · {formatMoney(item.precio_actual, item.moneda_actual || "USD")}</span>
-                </button>
-              ))}
+              {(productosCotizacion as any[]).slice(0, 20).map((item) => {
+                const isCompuesto = item._tipo === "COMPUESTO";
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`quoteProductResult ${String(productoForm.idProducto) === String(item.id) ? "selected" : ""}`}
+                    onClick={() => {
+                      setProductoForm({
+                        idProducto: String(item.id),
+                        cantidad: productoForm.cantidad,
+                        precio_unitario: isCompuesto ? "" : String(item.precio_actual || ""),
+                        moneda: isCompuesto ? "USD" : (item.moneda_actual || "USD"),
+                      });
+                    }}
+                  >
+                    {isCompuesto ? (
+                      <>
+                        <span className="quoteProductSku quoteProductKitBadge">Kit</span>
+                        <span className="quoteProductName">{item.nombre}</span>
+                        <span className="quoteProductMeta">{item.items?.length || 0} items · se expanden al agregar</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="quoteProductSku">{item.sku_producto_proveedor}</span>
+                        <span className="quoteProductName">{item.nombre_producto_proveedor}</span>
+                        <span className="quoteProductMeta">{item.proveedor?.nombre || "Sin proveedor"} · {formatMoney(item.precio_actual, item.moneda_actual || "USD")}</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })}
               {!productosCotizacion.length && <p className="quoteEmptyText">Sin productos para la busqueda</p>}
             </div>
           </div>
@@ -903,6 +972,7 @@ export function CotizacionesTab({
   openCotizacion,
   printCotizacionById,
 }: Props) {
+  const [showWizard, setShowWizard] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const form = {
@@ -962,80 +1032,102 @@ export function CotizacionesTab({
     setErrors({});
   }
 
+  function cancelWizard() {
+    clearQuote();
+    setShowWizard(false);
+  }
+
+  async function saveAndClose() {
+    if (!validateStep(0) || !validateStep(1)) return;
+    await saveCotizacion({ preventDefault: () => undefined });
+    setCurrentStep(0);
+    setShowWizard(false);
+  }
+
+  if (showWizard) {
+    return (
+      <section className="quoteWizard grid gap-5">
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="!m-0 text-xs font-extrabold uppercase tracking-wide text-sky-700">Modulo de cotizaciones</p>
+              <h1 className="!m-0 mt-1 text-2xl font-extrabold text-slate-950">Nueva cotizacion</h1>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-4 py-3 text-right">
+              <span className="block text-xs font-bold uppercase text-slate-500">Dolar oficial</span>
+              <strong className="text-slate-950">{dolarVenta ? formatMoney(dolarVenta, "ARS") : "-"}</strong>
+            </div>
+          </div>
+        </div>
+
+        <StepIndicator currentStep={currentStep} />
+        {errors.items && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{errors.items}</div>}
+
+        {currentStep === 0 && <Step1Form form={form} setForm={setCotizacionForm} errors={errors} />}
+        {currentStep === 1 && (
+          <Step2Items
+            form={form}
+            setForm={setCotizacionForm}
+            proveedores={proveedores}
+            categorias={categorias}
+            subcategorias={subcategorias}
+            productosCotizacion={productosCotizacion}
+            cotizacionProducto={cotizacionProducto}
+            setCotizacionProducto={setCotizacionProducto}
+            items={cotizacionItems}
+            setItems={setCotizacionItems}
+            dolarVenta={dolarVenta}
+            totals={totals}
+          />
+        )}
+        {currentStep === 2 && <Step3Preview form={form} items={cotizacionItems} totals={totals} quoteNumber={quoteNumber} dolarVenta={dolarVenta} />}
+
+        <div className="quoteActionBar">
+          <div className="quoteActionGroup">
+            <button type="button" className="quoteBtn quoteBtnMuted" onClick={() => setCurrentStep((step) => Math.max(step - 1, 0))} disabled={currentStep === 0}>Anterior</button>
+            <button type="button" className="quoteBtn quoteBtnGhost" onClick={cancelWizard}>Cancelar</button>
+          </div>
+          <div className="quoteActionGroup">
+            {currentStep < 2 ? (
+              <button type="button" className="quoteBtn quoteBtnPrimary" onClick={nextStep}>Siguiente</button>
+            ) : (
+              <button type="button" className="quoteBtn quoteBtnPrimary" onClick={saveAndClose}><FileText size={16} />Guardar cotizacion</button>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="quoteWizard grid gap-5">
-      <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="!m-0 text-xs font-extrabold uppercase tracking-wide text-sky-700">Modulo de cotizaciones</p>
-            <h1 className="!m-0 mt-1 text-2xl font-extrabold text-slate-950">Nueva cotizacion</h1>
-          </div>
-          <div className="rounded-xl bg-slate-50 px-4 py-3 text-right">
-            <span className="block text-xs font-bold uppercase text-slate-500">Dolar oficial</span>
-            <strong className="text-slate-950">{dolarVenta ? formatMoney(dolarVenta, "ARS") : "-"}</strong>
-          </div>
-        </div>
-      </div>
-      <StepIndicator currentStep={currentStep} />
-      {errors.items && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{errors.items}</div>}
-
-      {currentStep === 0 && <Step1Form form={form} setForm={setCotizacionForm} errors={errors} />}
-      {currentStep === 1 && (
-        <Step2Items
-          form={form}
-          setForm={setCotizacionForm}
-          proveedores={proveedores}
-          categorias={categorias}
-          subcategorias={subcategorias}
-          productosCotizacion={productosCotizacion}
-          cotizacionProducto={cotizacionProducto}
-          setCotizacionProducto={setCotizacionProducto}
-          items={cotizacionItems}
-          setItems={setCotizacionItems}
-          dolarVenta={dolarVenta}
-          totals={totals}
-        />
-      )}
-      {currentStep === 2 && <Step3Preview form={form} items={cotizacionItems} totals={totals} quoteNumber={quoteNumber} dolarVenta={dolarVenta} />}
-
-      <div className="quoteActionBar">
-        <div className="quoteActionGroup">
-          <button type="button" className="quoteBtn quoteBtnMuted" onClick={() => setCurrentStep((step) => Math.max(step - 1, 0))} disabled={currentStep === 0}>Anterior</button>
-          <button type="button" className="quoteBtn quoteBtnGhost" onClick={clearQuote}>Limpiar</button>
-        </div>
-        <div className="quoteActionGroup">
-          {currentStep < 2 ? (
-            <button type="button" className="quoteBtn quoteBtnPrimary" onClick={nextStep}>Siguiente</button>
-          ) : (
-            <button type="button" className="quoteBtn quoteBtnPrimary" onClick={saveCurrentQuote}><FileText size={16} />Guardar cotizacion</button>
-          )}
-        </div>
-      </div>
-
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="panelHead">
-          <h2 className="!m-0 px-1 py-1">Cotizaciones guardadas</h2>
-          <button type="button" className="!rounded-lg !bg-slate-100 !text-slate-700 hover:!bg-slate-200" onClick={loadCotizaciones}>Actualizar</button>
+          <h2 className="!m-0 px-1 py-1">Cotizaciones</h2>
+          <div className="rowActions">
+            <button type="button" className="!rounded-lg !bg-slate-100 !text-slate-700 hover:!bg-slate-200" onClick={loadCotizaciones}>Actualizar</button>
+            <button type="button" onClick={() => setShowWizard(true)}>+ Nueva cotizacion</button>
+          </div>
         </div>
         <div className="overflow-auto">
-        <table><thead><tr><th>ID</th><th>Titulo</th><th>Cliente</th><th>Obra</th><th>Items</th><th>Precio venta</th><th>Fecha</th><th></th></tr></thead><tbody>
-          {cotizaciones.map((item) => (
-            <tr key={item.id}>
-              <td>{item.id}</td>
-              <td>{item.titulo}</td>
-              <td>{item.cliente || "-"}</td>
-              <td>{item.obra || "-"}</td>
-              <td>{item._count?.items ?? "-"}</td>
-              <td>{formatMoney(item.total_usd, "USD")} +IVA</td>
-              <td>{formatDate(item.creada_en)}</td>
-              <td className="rowActions">
-                <button type="button" onClick={() => openCotizacion(item.id)}>Ver</button>
-                <button type="button" className="secondary" onClick={() => printCotizacionById(item.id)}>PDF</button>
-              </td>
-            </tr>
-          ))}
-          {!cotizaciones.length && <tr><td colSpan={8}>Sin cotizaciones guardadas</td></tr>}
-        </tbody></table>
+          <table><thead><tr><th>ID</th><th>Titulo</th><th>Cliente</th><th>Obra</th><th>Items</th><th>Precio venta</th><th>Fecha</th><th></th></tr></thead><tbody>
+            {cotizaciones.map((item) => (
+              <tr key={item.id}>
+                <td>{item.id}</td>
+                <td>{item.titulo}</td>
+                <td>{item.cliente || "-"}</td>
+                <td>{item.obra || "-"}</td>
+                <td>{item._count?.items ?? "-"}</td>
+                <td>{formatMoney(item.total_usd, "USD")} +IVA</td>
+                <td>{formatDate(item.creada_en)}</td>
+                <td className="rowActions">
+                  <button type="button" onClick={() => openCotizacion(item.id)}>Ver</button>
+                  <button type="button" className="secondary" onClick={() => printCotizacionById(item.id)}>PDF</button>
+                </td>
+              </tr>
+            ))}
+            {!cotizaciones.length && <tr><td colSpan={8}>Sin cotizaciones guardadas</td></tr>}
+          </tbody></table>
         </div>
       </section>
     </section>

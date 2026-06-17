@@ -19,6 +19,15 @@ export function ClasificacionTab({
   limpiarCategoria,
   proveedores,
   categorias,
+  productoEditar,
+  abrirModalEditar,
+  cerrarModalEditar,
+  categoriaEditar,
+  setCategoriaEditar,
+  subcategoriaEditar,
+  setSubcategoriaEditar,
+  subcategoriasEditar,
+  guardarEdicion,
 }) {
   const todosSeleccionados = productos.length > 0 && seleccionados.size === productos.length;
   const haySeleccion = seleccionados.size > 0;
@@ -78,7 +87,7 @@ export function ClasificacionTab({
             </Select>
           </Field>
           <button type="button" onClick={aplicarCategoria} disabled={!haySeleccion}>
-            Aplicar
+            Aplicar a seleccionados
           </button>
           <button type="button" className="secondary" onClick={limpiarCategoria} disabled={!haySeleccion}>
             Limpiar categoría
@@ -110,8 +119,13 @@ export function ClasificacionTab({
             </thead>
             <tbody>
               {productos.map((p) => (
-                <tr key={p.id}>
-                  <td>
+                <tr
+                  key={p.id}
+                  onClick={() => abrirModalEditar(p)}
+                  style={{ cursor: "pointer" }}
+                  title="Clic para editar categoría"
+                >
+                  <td onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={seleccionados.has(p.id)}
@@ -128,6 +142,61 @@ export function ClasificacionTab({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {productoEditar && (
+        <div
+          className="modalOverlay"
+          onClick={cerrarModalEditar}
+        >
+          <div
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "380px" }}
+          >
+            <h2>Editar categoría</h2>
+            <p style={{ color: "#64748b", marginBottom: "1rem", fontSize: "0.9rem" }}>
+              <strong>{productoEditar.nombre_producto_proveedor}</strong>
+              <br />
+              {productoEditar.proveedor?.nombre} · {productoEditar.sku_producto_proveedor}
+            </p>
+
+            <Field label="Categoría">
+              <Select value={categoriaEditar} onChange={setCategoriaEditar}>
+                <option value="">Sin categoría</option>
+                {categorias.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Subcategoría">
+              <Select
+                value={subcategoriaEditar}
+                onChange={setSubcategoriaEditar}
+                disabled={!categoriaEditar}
+              >
+                <option value="">Sin subcategoría</option>
+                {subcategoriasEditar.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nombre}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <div className="modalFooter">
+              <button type="button" onClick={guardarEdicion}>
+                Guardar
+              </button>
+              <button type="button" className="secondary" onClick={cerrarModalEditar}>
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

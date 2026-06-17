@@ -92,6 +92,7 @@ model ProductoProveedor {
   subcategoria               Subcategoria?     @relation(fields: [id_subcategoria], references: [id])
   historial_precios          HistorialPrecio[]
   cotizacion_items           CotizacionItem[]
+  compuesto_items            ProductoCompuestoItem[]
 
   @@unique([id_proveedor, sku_producto_proveedor], name: "uq_productos_proveedor_proveedor_sku")
   @@index([id_proveedor])
@@ -161,4 +162,32 @@ model HistorialPrecio {
   @@index([id_producto_proveedor])
   @@index([fecha_actualizada])
   @@map("historial_precios")
+}
+
+model ProductoCompuesto {
+  id          Int                     @id @default(autoincrement())
+  nombre      String                  @unique @db.VarChar(255)
+  descripcion String?
+  activo      Boolean                 @default(true)
+  items       ProductoCompuestoItem[]
+
+  @@map("productos_compuestos")
+}
+
+model ProductoCompuestoItem {
+  id                    Int                @id @default(autoincrement())
+  id_producto_compuesto Int
+  tipo                  TipoItemCotizacion
+  id_producto_proveedor Int?
+  descripcion           String             @db.VarChar(500)
+  cantidad              Decimal            @db.Decimal(14, 4)
+  unidad                String?            @db.VarChar(40)
+  precio_unitario       Decimal?           @db.Decimal(14, 4)
+  moneda                Moneda?
+  producto_compuesto    ProductoCompuesto  @relation(fields: [id_producto_compuesto], references: [id], onDelete: Cascade)
+  producto_proveedor    ProductoProveedor? @relation(fields: [id_producto_proveedor], references: [id], onDelete: SetNull)
+
+  @@index([id_producto_compuesto])
+  @@index([id_producto_proveedor])
+  @@map("productos_compuestos_items")
 }

@@ -1,6 +1,7 @@
 import React from "react";
 import { Actions, Checkbox, Field, Select, TextInput } from "../../components/ui.jsx";
 import { formatMoney } from "../../utils/format.js";
+import { CompuestoModal } from "./CompuestoModal.jsx";
 
 function ProductoProveedorForm({
   productoProveedorForm,
@@ -91,9 +92,26 @@ export function ProductosTab({
   goProductosPage,
   productosProveedor,
   openProductoModal,
+  // compuestos
+  compuestos,
+  compuestoForm,
+  setCompuestoForm,
+  compuestoItems,
+  compuestoItemForm,
+  setCompuestoItemForm,
+  compuestoModalOpen,
+  saveCompuesto,
+  addItemToCompuesto,
+  removeItemFromCompuesto,
+  editingCompuesto,
+  openNuevoCompuestoModal,
+  openEditCompuestoModal,
+  closeCompuestoModal,
+  productosBusqueda,
 }) {
   return (
-    <section className="productLayout">
+    <div className="space-y-6">
+      <div className="productLayout">
       <section className="panel wide">
         <div className="panelHead">
           <h2>Productos</h2>
@@ -118,6 +136,33 @@ export function ProductosTab({
           ))}
         </tbody></table>
       </section>
+      </div>
+
+      <section className="panel wide fullWidthPanel">
+        <div className="panelHead">
+          <h2>Productos compuestos</h2>
+          <button type="button" onClick={openNuevoCompuestoModal}>+ Nuevo compuesto</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Descripcion</th><th>Items</th><th></th></tr></thead>
+          <tbody>
+            {compuestos.length === 0 && (
+              <tr><td colSpan={4} className="emptyHint">Sin compuestos creados aun</td></tr>
+            )}
+            {compuestos.map((c) => (
+              <tr key={c.id}>
+                <td>{c.nombre}</td>
+                <td>{c.descripcion || "-"}</td>
+                <td>{c.items?.length || 0} items</td>
+                <td className="rowActions">
+                  <button type="button" onClick={() => openEditCompuestoModal(c)}>Editar</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
       <NuevoProductoModal
         open={productoProveedorModalOpen}
         closeNuevoProductoModal={closeNuevoProductoModal}
@@ -128,6 +173,21 @@ export function ProductosTab({
         categorias={categorias}
         subcategoriasProductoProveedor={subcategoriasProductoProveedor}
       />
-    </section>
+
+      <CompuestoModal
+        open={compuestoModalOpen}
+        onClose={closeCompuestoModal}
+        compuestoForm={compuestoForm}
+        setCompuestoForm={setCompuestoForm}
+        compuestoItems={compuestoItems}
+        compuestoItemForm={compuestoItemForm}
+        setCompuestoItemForm={setCompuestoItemForm}
+        saveCompuesto={saveCompuesto}
+        addItemToCompuesto={addItemToCompuesto}
+        removeItemFromCompuesto={removeItemFromCompuesto}
+        editingCompuesto={editingCompuesto}
+        productosBusqueda={productosBusqueda}
+      />
+    </div>
   );
 }

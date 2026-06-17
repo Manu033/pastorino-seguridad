@@ -8,10 +8,18 @@ export function useClasificacion({ apiUrl, run, setError, subcategorias }) {
   const [seleccionados, setSeleccionados] = useState(new Set());
   const [categoriaAsignar, setCategoriaAsignar] = useState("");
   const [subcategoriaAsignar, setSubcategoriaAsignar] = useState("");
+  const [productoEditar, setProductoEditar] = useState(null);
+  const [categoriaEditar, setCategoriaEditar] = useState("");
+  const [subcategoriaEditar, setSubcategoriaEditar] = useState("");
 
   const subcategoriasDisponibles = useMemo(
     () => subcategorias.filter((s) => String(s.id_categoria) === String(categoriaAsignar)),
     [subcategorias, categoriaAsignar],
+  );
+
+  const subcategoriasEditar = useMemo(
+    () => subcategorias.filter((s) => String(s.id_categoria) === String(categoriaEditar)),
+    [subcategorias, categoriaEditar],
   );
 
   async function cargarProductos() {
@@ -85,6 +93,39 @@ export function useClasificacion({ apiUrl, run, setError, subcategorias }) {
     setSubcategoriaAsignar("");
   }
 
+  function abrirModalEditar(producto) {
+    setProductoEditar(producto);
+    setCategoriaEditar(producto.id_categoria ? String(producto.id_categoria) : "");
+    setSubcategoriaEditar(producto.id_subcategoria ? String(producto.id_subcategoria) : "");
+  }
+
+  function cerrarModalEditar() {
+    setProductoEditar(null);
+    setCategoriaEditar("");
+    setSubcategoriaEditar("");
+  }
+
+  function handleSetCategoriaEditar(value) {
+    setCategoriaEditar(value);
+    setSubcategoriaEditar("");
+  }
+
+  async function guardarEdicion() {
+    if (!productoEditar) return;
+    await run("Categoría actualizada", async () => {
+      await request(apiUrl, "/productos-proveedor/bulk-categorizar", {
+        method: "PATCH",
+        body: JSON.stringify({
+          ids: [productoEditar.id],
+          id_categoria: categoriaEditar ? Number(categoriaEditar) : null,
+          id_subcategoria: subcategoriaEditar ? Number(subcategoriaEditar) : null,
+        }),
+      });
+      cerrarModalEditar();
+      await cargarProductos();
+    });
+  }
+
   return {
     productos,
     loading,
@@ -101,5 +142,14 @@ export function useClasificacion({ apiUrl, run, setError, subcategorias }) {
     toggleTodos,
     aplicarCategoria,
     limpiarCategoria,
+    productoEditar,
+    abrirModalEditar,
+    cerrarModalEditar,
+    categoriaEditar,
+    setCategoriaEditar: handleSetCategoriaEditar,
+    subcategoriaEditar,
+    setSubcategoriaEditar,
+    subcategoriasEditar,
+    guardarEdicion,
   };
 }
