@@ -13,6 +13,9 @@ import { cleanText, normalizeSearch, toNumber, toNumberOrNull } from "../../util
 
 export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBusqueda }) {
   const [cotizacionForm, setCotizacionForm] = useState(emptyCotizacionForm);
+  const [estadoFiltro, setEstadoFiltro] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [cotizacionProducto, setCotizacionProducto] = useState(emptyCotizacionProducto);
   const [cotizacionManual, setCotizacionManual] = useState(emptyCotizacionManual);
   const [cotizacionManoObra, setCotizacionManoObra] = useState(emptyCotizacionManoObra);
@@ -22,6 +25,8 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
   const [cotizacionSeleccionada, setCotizacionSeleccionada] = useState(null);
   const [cotizacionEdit, setCotizacionEdit] = useState(null);
   const [cotizacionEditando, setCotizacionEditando] = useState(false);
+  const [cotizacionEditId, setCotizacionEditId] = useState(null);
+  const [cotizacionWizardOpen, setCotizacionWizardOpen] = useState(false);
 
   const cotizacionCostoDirectoUsd = useMemo(
     () => cotizacionItems.reduce((total, item) => total + toNumber(item.total_usd), 0),
@@ -54,6 +59,19 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
       ),
     [cotizacionEditCostoDirectoUsd, cotizacionEdit],
   );
+
+  const cotizacionesFiltradas = useMemo(() => {
+    const q = normalizeSearch(searchQuery);
+    return cotizaciones.filter((c) => {
+      if (estadoFiltro && c.estado !== estadoFiltro) return false;
+      if (!q) return true;
+      return (
+        normalizeSearch(c.titulo).includes(q) ||
+        normalizeSearch(c.cliente).includes(q) ||
+        normalizeSearch(c.obra).includes(q)
+      );
+    });
+  }, [cotizaciones, estadoFiltro, searchQuery]);
 
   const productosCotizacion = useMemo(() => {
     const buscar = normalizeSearch(cotizacionProducto.buscar);
@@ -102,6 +120,53 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
     if (moneda === "USD") return cantidadNumber * precioNumber;
     const dolarNumber = toNumber(dolarReferencia);
     return dolarNumber ? (cantidadNumber * precioNumber) / dolarNumber : 0;
+  }
+
+  function toDateInputValue(value) {
+    if (!value) return emptyCotizacionForm.fecha_emision;
+    return String(value).slice(0, 10);
+  }
+
+  function mapCotizacionToForm(cotizacion) {
+    return {
+      ...emptyCotizacionForm,
+      tipo: cotizacion.tipo || emptyCotizacionForm.tipo,
+      titulo: cotizacion.titulo || "",
+      cliente: cotizacion.cliente || "",
+      contacto_cliente: cotizacion.contacto_cliente || "",
+      cuit_cliente: cotizacion.cuit_cliente || "",
+      email_cliente: cotizacion.email_cliente || "",
+      obra: cotizacion.obra || "",
+      fecha_emision: toDateInputValue(cotizacion.fecha_emision),
+      validez_dias: String(cotizacion.validez_dias || emptyCotizacionForm.validez_dias),
+      moneda_base: cotizacion.moneda_base || emptyCotizacionForm.moneda_base,
+      observaciones: cotizacion.observaciones || "",
+      porcentaje_utilidad: String(cotizacion.porcentaje_utilidad ?? emptyCotizacionForm.porcentaje_utilidad),
+      aplica_costos_varios: Boolean(cotizacion.aplica_costos_varios),
+      porcentaje_costos_varios: String(cotizacion.porcentaje_costos_varios ?? emptyCotizacionForm.porcentaje_costos_varios),
+    };
+  }
+
+  function mapCotizacionItemsToDraft(items = []) {
+    return items.map((item) => ({
+      localId: crypto.randomUUID(),
+      id_producto_proveedor: item.id_producto_proveedor || null,
+      tipo: item.tipo,
+      grupo: item.descripcion?.toLowerCase().startsWith("mano de obra") ? "MANO_OBRA" : "MATERIAL",
+      descripcion: item.descripcion || "",
+      cantidad: Number(item.cantidad),
+      unidad: item.unidad || "",
+      precio_unitario: Number(item.precio_unitario),
+      moneda: item.moneda || "USD",
+      total_usd: Number(item.total_usd),
+    }));
+  }
+
+  function clearCotizacionDraft() {
+    setCotizacionForm(emptyCotizacionForm);
+    setCotizacionItems([]);
+    setCotizacionProducto(emptyCotizacionProducto);
+    setCotizacionEditId(null);
   }
 
   async function loadCotizaciones() {
@@ -233,29 +298,54 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
     event.preventDefault();
     if (!cotizacionForm.titulo.trim()) {
       setError("Carga un titulo para la cotizacion");
-      return;
+      return false;
     }
     if (!cotizacionItems.length) {
       setError("Agrega al menos un item a la cotizacion");
-      return;
+      return false;
     }
-    await run("Cotizacion guardada", async () => {
-      await request(apiUrl, "/cotizaciones", {
-        method: "POST",
+    const saved = await run(cotizacionEditId ? "Cotizacion actualizada" : "Cotizacion guardada", async () => {
+      await request(apiUrl, cotizacionEditId ? `/cotizaciones/${cotizacionEditId}` : "/cotizaciones", {
+        method: cotizacionEditId ? "PUT" : "POST",
         body: JSON.stringify({
           ...cotizacionForm,
           cliente: cleanText(cotizacionForm.cliente),
+          contacto_cliente: cleanText(cotizacionForm.contacto_cliente),
+          cuit_cliente: cleanText(cotizacionForm.cuit_cliente),
+          email_cliente: cleanText(cotizacionForm.email_cliente),
           obra: cleanText(cotizacionForm.obra),
           observaciones: cleanText(cotizacionForm.observaciones),
           dolar_referencia: dolarVenta || null,
           ...cotizacionResumen,
-          items: cotizacionItems.map(({ localId: _localId, ...item }) => item),
+          items: cotizacionItems.map(({ localId: _localId, grupo: _grupo, ...item }) => item),
         }),
       });
-      setCotizacionForm(emptyCotizacionForm);
-      setCotizacionItems([]);
+      clearCotizacionDraft();
       await loadCotizaciones();
+      return true;
     });
+    return Boolean(saved);
+  }
+
+  async function loadCotizacionIntoWizard(id) {
+    const loaded = await run("Cotizacion cargada para editar", async () => {
+      const cotizacion = await request(apiUrl, `/cotizaciones/${id}`);
+      setCotizacionEditId(cotizacion.id);
+      setCotizacionForm(mapCotizacionToForm(cotizacion));
+      setCotizacionItems(mapCotizacionItemsToDraft(cotizacion.items));
+      setCotizacionProducto(emptyCotizacionProducto);
+      setError("");
+      return true;
+    });
+    return Boolean(loaded);
+  }
+
+  async function editCotizacionInWizard(id = cotizacionSeleccionada?.id) {
+    if (!id) return;
+    const loaded = await loadCotizacionIntoWizard(id);
+    if (!loaded) return;
+    closeCotizacionModal();
+    setCotizacionWizardOpen(true);
   }
 
   async function openCotizacion(id) {
@@ -426,6 +516,22 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
     if (!result.ok) setError(result.error);
   }
 
+  async function updateCotizacionStatus(id, estado) {
+    setUpdatingStatus(true);
+    try {
+      const updated = await request(apiUrl, `/cotizaciones/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ estado }),
+      });
+      setCotizaciones((current) => current.map((c) => (c.id === id ? { ...c, estado: updated.estado } : c)));
+      setCotizacionSeleccionada((current) => (current?.id === id ? updated : current));
+    } catch (err) {
+      setError(err?.message || "Error al actualizar el estado");
+    } finally {
+      setUpdatingStatus(false);
+    }
+  }
+
   return {
     cotizacionForm,
     setCotizacionForm,
@@ -444,6 +550,9 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
     cotizacionEdit,
     setCotizacionEdit,
     cotizacionEditando,
+    cotizacionEditId,
+    cotizacionWizardOpen,
+    setCotizacionWizardOpen,
     cotizacionResumen,
     cotizacionEditResumen,
     productosCotizacion,
@@ -455,6 +564,9 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
     addManualCotizacion,
     addManoObraCotizacion,
     saveCotizacion,
+    loadCotizacionIntoWizard,
+    editCotizacionInWizard,
+    clearCotizacionDraft,
     openCotizacion,
     closeCotizacionModal,
     startCotizacionEdit,
@@ -465,5 +577,12 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
     saveCotizacionEdit,
     printCotizacionById,
     printCotizacion,
+    estadoFiltro,
+    setEstadoFiltro,
+    searchQuery,
+    setSearchQuery,
+    cotizacionesFiltradas,
+    updatingStatus,
+    updateCotizacionStatus,
   };
 }

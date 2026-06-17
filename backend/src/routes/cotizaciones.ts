@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db/prisma.js";
 import { asyncHandler, HttpError, parseId } from "../http.js";
-import { cotizacionCreateSchema, cotizacionUpdateSchema } from "../schemas/cotizacion.js";
+import { cotizacionCreateSchema, cotizacionStatusSchema, cotizacionUpdateSchema } from "../schemas/cotizacion.js";
 
 export const cotizacionesRouter = Router();
 
@@ -80,6 +80,32 @@ cotizacionesRouter.get(
       },
     });
     if (!cotizacion) throw new HttpError(404, "Cotizacion no encontrada");
+    res.json(cotizacion);
+  }),
+);
+
+cotizacionesRouter.patch(
+  "/:id/status",
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const result = cotizacionStatusSchema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({ error: "Invalid status value", details: result.error.flatten() });
+      return;
+    }
+    const { estado } = result.data;
+    const existe = await prisma.cotizacion.findUnique({ where: { id } });
+    if (!existe) throw new HttpError(404, "Cotizacion no encontrada");
+    const cotizacion = await prisma.cotizacion.update({
+      where: { id },
+      data: { estado },
+      include: {
+        items: {
+          include: { producto_proveedor: { include: { proveedor: true } } },
+          orderBy: { id: "asc" },
+        },
+      },
+    });
     res.json(cotizacion);
   }),
 );

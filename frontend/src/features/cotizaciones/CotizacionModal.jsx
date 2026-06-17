@@ -1,6 +1,30 @@
 import React from "react";
 import { Checkbox, Field, Select, TextInput } from "../../components/ui.jsx";
 import { formatDate, formatMoney } from "../../utils/format.js";
+import { buildWhatsAppLinks } from "./whatsapp.js";
+
+const STATUS_STYLES = {
+  PENDIENTE: "bg-yellow-100 text-yellow-700",
+  APROBADA: "bg-green-100 text-green-700",
+  RECHAZADA: "bg-red-100 text-red-700",
+};
+
+const ALL_STATUSES = ["PENDIENTE", "APROBADA", "RECHAZADA"];
+
+const STATUS_ACTION_LABELS = {
+  PENDIENTE: "Volver a Pendiente",
+  APROBADA: "Aprobar",
+  RECHAZADA: "Rechazar",
+};
+
+function StatusBadge({ estado }) {
+  if (!estado) return null;
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_STYLES[estado] ?? "bg-slate-100 text-slate-600"}`}>
+      {estado}
+    </span>
+  );
+}
 
 function QuoteBreakdown({ resumen }) {
   return (
@@ -29,6 +53,8 @@ export function CotizacionModal({
   cancelCotizacionEdit,
   saveCotizacionEdit,
   startCotizacionEdit,
+  onUpdateStatus,
+  updatingStatus,
 }) {
   if (!cotizacionSeleccionada || !cotizacionEdit) return null;
 
@@ -122,6 +148,31 @@ export function CotizacionModal({
               <div><strong>Precio de venta</strong><span>{formatMoney(cotizacionSeleccionada.total_usd, "USD")} +IVA</span></div>
             </div>
 
+            {/* Status section — view mode only, not in wizard */}
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <strong className="text-sm text-slate-600">Estado:</strong>
+              <StatusBadge estado={cotizacionSeleccionada.estado} />
+              <div className="flex flex-wrap gap-2 ml-auto">
+                {ALL_STATUSES.filter((s) => s !== cotizacionSeleccionada.estado).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={updatingStatus}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
+                      s === "APROBADA"
+                        ? "bg-green-600 text-white hover:bg-green-700"
+                        : s === "RECHAZADA"
+                          ? "bg-red-600 text-white hover:bg-red-700"
+                          : "bg-yellow-500 text-white hover:bg-yellow-600"
+                    }`}
+                    onClick={() => onUpdateStatus && onUpdateStatus(cotizacionSeleccionada.id, s)}
+                  >
+                    {STATUS_ACTION_LABELS[s] ?? s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <QuoteBreakdown resumen={cotizacionSeleccionada} />
 
             {cotizacionSeleccionada.observaciones && (
@@ -144,6 +195,68 @@ export function CotizacionModal({
                 ))}
               </tbody></table>
             </div>
+
+            {/* Purchase section — only when APROBADA */}
+            {cotizacionSeleccionada.estado === "APROBADA" && (() => {
+              const links = buildWhatsAppLinks(cotizacionSeleccionada.items || []);
+              const manualItems = (cotizacionSeleccionada.items || []).filter(
+                (item) => item.tipo === "MANUAL",
+              );
+              if (!links.length && !manualItems.length) return null;
+              return (
+                <div className="grid gap-3">
+                  {links.length > 0 && (
+                    <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-4">
+                      <strong className="mb-3 block text-sm text-green-800">Contacto proveedores</strong>
+                      <div className="grid gap-2">
+                        {links.map((group) => (
+                          <div key={group.proveedorId} className="rounded-lg border border-green-200 bg-white px-3 py-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              {group.hasPhone ? (
+                                <a
+                                  href={group.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-bold text-green-700 hover:underline"
+                                >
+                                  {group.proveedorNombre}
+                                </a>
+                              ) : (
+                                <span className="font-bold text-slate-600">
+                                  {group.proveedorNombre} <span className="text-xs font-normal text-slate-400">(sin telefono)</span>
+                                </span>
+                              )}
+                            </div>
+                            <ul className="mt-1 list-inside list-disc text-xs text-slate-600">
+                              {group.productos.map((p, i) => <li key={i}>{p}</li>)}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {manualItems.length > 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+                      <strong className="mb-3 block text-sm text-amber-800">Items manuales a tener en cuenta</strong>
+                      <ul className="grid gap-1">
+                        {manualItems.map((item) => {
+                          const cantidadDisplay =
+                            Number(item.cantidad) % 1 === 0
+                              ? String(Number(item.cantidad))
+                              : Number(item.cantidad).toLocaleString("es-AR");
+                          return (
+                            <li key={item.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-700">
+                              {item.descripcion} <span className="font-bold">x{cantidadDisplay}</span>
+                              {item.unidad ? <span className="ml-1 text-xs text-slate-400">{item.unidad}</span> : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </>
         )}
 
@@ -156,7 +269,7 @@ export function CotizacionModal({
               <button type="button" onClick={saveCotizacionEdit}>Guardar cambios</button>
             </>
           ) : (
-            <button type="button" onClick={startCotizacionEdit}>Editar</button>
+            <button type="button" onClick={() => startCotizacionEdit()}>Editar</button>
           )}
         </div>
       </section>

@@ -34,6 +34,12 @@ enum RedondeoCompra {
   ARRIBA
 }
 
+enum EstadoCotizacion {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+
 model Proveedor {
   id                  Int                 @id @default(autoincrement())
   nombre              String              @unique @db.VarChar(150)
@@ -124,11 +130,13 @@ model Cotizacion {
   porcentaje_costos_varios   Decimal          @default(0) @db.Decimal(8, 4)
   monto_costos_varios_usd    Decimal          @default(0) @db.Decimal(14, 4)
   total_usd                  Decimal          @db.Decimal(14, 4)
+  estado                     EstadoCotizacion @default(PENDIENTE)
   creada_en                  DateTime         @default(now())
   items                      CotizacionItem[]
 
   @@index([creada_en])
   @@index([tipo])
+  @@index([estado])
   @@map("cotizaciones")
 }
 

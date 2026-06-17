@@ -72,6 +72,8 @@ type Producto = {
 type Proveedor = { id: number; nombre: string; tipos: TipoCotizacion[] };
 type Categoria = { id: number; nombre: string };
 type Subcategoria = { id: number; id_categoria: number; nombre: string };
+type EstadoCotizacion = "PENDIENTE" | "APROBADA" | "RECHAZADA";
+
 type CotizacionGuardada = {
   id: number;
   titulo: string;
@@ -79,11 +81,12 @@ type CotizacionGuardada = {
   obra?: string | null;
   total_usd: string | number;
   creada_en: string;
+  estado?: EstadoCotizacion;
   _count?: { items: number };
 };
 
 type Props = {
-  saveCotizacion: (event: { preventDefault: () => void }) => Promise<void>;
+  saveCotizacion: (event: { preventDefault: () => void }) => Promise<boolean>;
   cotizacionForm: CotizacionForm;
   setCotizacionForm: React.Dispatch<React.SetStateAction<CotizacionForm>>;
   setCotizacionItems: React.Dispatch<React.SetStateAction<CotizacionItem[]>>;
@@ -96,8 +99,17 @@ type Props = {
   productosCotizacion: Producto[];
   cotizacionItems: CotizacionItem[];
   cotizaciones: CotizacionGuardada[];
+  cotizacionesFiltradas: CotizacionGuardada[];
+  estadoFiltro: EstadoCotizacion | null;
+  setEstadoFiltro: (estado: EstadoCotizacion | null) => void;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
   loadCotizaciones: () => void;
   openCotizacion: (id: number) => void;
+  clearCotizacionDraft: () => void;
+  cotizacionEditId?: number | null;
+  cotizacionWizardOpen: boolean;
+  setCotizacionWizardOpen: React.Dispatch<React.SetStateAction<boolean>>;
   printCotizacionById: (id: number) => void;
 };
 
@@ -332,6 +344,7 @@ function Step2Items({
   const [manualForm, setManualForm] = useState({ descripcion: "", cantidad: "1", unidad: "gl", precio_unitario: "", moneda: "USD" as Moneda });
   const [manoForm, setManoForm] = useState({ descripcion: "Mano de obra", personas: "1", dias: "1", precio_unitario: "", moneda: "USD" as Moneda });
 
+  const visibleProductosCotizacion = (productosCotizacion as any[]).slice(0, 50);
   const selectedProduct = productosCotizacion.find((item) => String(item.id) === String(productoForm.idProducto));
 
   function pushItem(item: CotizacionItem) {
@@ -569,7 +582,7 @@ function Step2Items({
             </div>
 
             <div className="quoteProductResults">
-              {(productosCotizacion as any[]).slice(0, 20).map((item) => {
+              {visibleProductosCotizacion.map((item) => {
                 const isCompuesto = item._tipo === "COMPUESTO";
                 return (
                   <button
@@ -601,6 +614,9 @@ function Step2Items({
                   </button>
                 );
               })}
+              {productosCotizacion.length > visibleProductosCotizacion.length && (
+                <p className="quoteEmptyText">Mostrando {visibleProductosCotizacion.length} de {productosCotizacion.length} resultados. Refina la busqueda para ver menos.</p>
+              )}
               {!productosCotizacion.length && <p className="quoteEmptyText">Sin productos para la busqueda</p>}
             </div>
           </div>
@@ -954,6 +970,21 @@ function Signature({ label }: { label: string }) {
   );
 }
 
+const STATUS_STYLES: Record<EstadoCotizacion, string> = {
+  PENDIENTE: "bg-yellow-100 text-yellow-700",
+  APROBADA: "bg-green-100 text-green-700",
+  RECHAZADA: "bg-red-100 text-red-700",
+};
+
+function StatusBadge({ estado }: { estado?: EstadoCotizacion }) {
+  if (!estado) return null;
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_STYLES[estado] ?? "bg-slate-100 text-slate-600"}`}>
+      {estado}
+    </span>
+  );
+}
+
 export function CotizacionesTab({
   saveCotizacion,
   cotizacionForm,
@@ -968,11 +999,19 @@ export function CotizacionesTab({
   productosCotizacion,
   cotizacionItems,
   cotizaciones,
+  cotizacionesFiltradas,
+  estadoFiltro,
+  setEstadoFiltro,
+  searchQuery,
+  setSearchQuery,
   loadCotizaciones,
   openCotizacion,
+  clearCotizacionDraft,
+  cotizacionEditId,
+  cotizacionWizardOpen,
+  setCotizacionWizardOpen,
   printCotizacionById,
 }: Props) {
-  const [showWizard, setShowWizard] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const form = {
@@ -1000,7 +1039,10 @@ export function CotizacionesTab({
     };
   }, [cotizacionItems, form.aplica_costos_varios, form.porcentaje_utilidad]);
 
-  const quoteNumber = useMemo(() => buildQuoteNumber(cotizaciones), [cotizaciones]);
+  const quoteNumber = useMemo(
+    () => (cotizacionEditId ? `COT-${String(cotizacionEditId).padStart(4, "0")}` : buildQuoteNumber(cotizaciones)),
+    [cotizacionEditId, cotizaciones],
+  );
 
   function validateStep(step: number) {
     const nextErrors: Record<string, string> = {};
@@ -1021,37 +1063,42 @@ export function CotizacionesTab({
 
   async function saveCurrentQuote() {
     if (!validateStep(0) || !validateStep(1)) return;
-    await saveCotizacion({ preventDefault: () => undefined });
-    setCurrentStep(0);
+    const saved = await saveCotizacion({ preventDefault: () => undefined });
+    if (saved) setCurrentStep(0);
   }
 
   function clearQuote() {
-    setCotizacionForm(emptyCotizacionForm as CotizacionForm);
-    setCotizacionItems([]);
+    clearCotizacionDraft();
     setCurrentStep(0);
     setErrors({});
   }
 
+  function startNewQuote() {
+    clearQuote();
+    setCotizacionWizardOpen(true);
+  }
+
   function cancelWizard() {
     clearQuote();
-    setShowWizard(false);
+    setCotizacionWizardOpen(false);
   }
 
   async function saveAndClose() {
     if (!validateStep(0) || !validateStep(1)) return;
-    await saveCotizacion({ preventDefault: () => undefined });
+    const saved = await saveCotizacion({ preventDefault: () => undefined });
+    if (!saved) return;
     setCurrentStep(0);
-    setShowWizard(false);
+    setCotizacionWizardOpen(false);
   }
 
-  if (showWizard) {
+  if (cotizacionWizardOpen) {
     return (
       <section className="quoteWizard grid gap-5">
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="!m-0 text-xs font-extrabold uppercase tracking-wide text-sky-700">Modulo de cotizaciones</p>
-              <h1 className="!m-0 mt-1 text-2xl font-extrabold text-slate-950">Nueva cotizacion</h1>
+              <h1 className="!m-0 mt-1 text-2xl font-extrabold text-slate-950">{cotizacionEditId ? "Editar cotizacion" : "Nueva cotizacion"}</h1>
             </div>
             <div className="rounded-xl bg-slate-50 px-4 py-3 text-right">
               <span className="block text-xs font-bold uppercase text-slate-500">Dolar oficial</span>
@@ -1091,7 +1138,7 @@ export function CotizacionesTab({
             {currentStep < 2 ? (
               <button type="button" className="quoteBtn quoteBtnPrimary" onClick={nextStep}>Siguiente</button>
             ) : (
-              <button type="button" className="quoteBtn quoteBtnPrimary" onClick={saveAndClose}><FileText size={16} />Guardar cotizacion</button>
+              <button type="button" className="quoteBtn quoteBtnPrimary" onClick={saveAndClose}><FileText size={16} />{cotizacionEditId ? "Guardar cambios" : "Guardar cotizacion"}</button>
             )}
           </div>
         </div>
@@ -1106,18 +1153,52 @@ export function CotizacionesTab({
           <h2 className="!m-0 px-1 py-1">Cotizaciones</h2>
           <div className="rowActions">
             <button type="button" className="!rounded-lg !bg-slate-100 !text-slate-700 hover:!bg-slate-200" onClick={loadCotizaciones}>Actualizar</button>
-            <button type="button" onClick={() => setShowWizard(true)}>+ Nueva cotizacion</button>
+            <button type="button" onClick={startNewQuote}>+ Nueva cotizacion</button>
           </div>
         </div>
+
+        <div className="border-b border-slate-100 px-4 py-3 flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            {([null, "PENDIENTE", "APROBADA", "RECHAZADA"] as Array<EstadoCotizacion | null>).map((estado) => (
+              <button
+                key={estado ?? "all"}
+                type="button"
+                className={`rounded-full px-3 py-1 text-xs font-bold transition ${
+                  estadoFiltro === estado
+                    ? estado === "APROBADA"
+                      ? "bg-green-600 text-white"
+                        : estado === "RECHAZADA"
+                          ? "bg-red-600 text-white"
+                          : estado === "PENDIENTE"
+                          ? "bg-yellow-500 text-white"
+                          : "bg-sky-700 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+                onClick={() => setEstadoFiltro(estado)}
+              >
+                {estado ?? "Todas"}
+              </button>
+            ))}
+          </div>
+          <input
+            type="search"
+            placeholder="Buscar por título, cliente u obra..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400"
+          />
+        </div>
+
         <div className="overflow-auto">
-          <table><thead><tr><th>ID</th><th>Titulo</th><th>Cliente</th><th>Obra</th><th>Items</th><th>Precio venta</th><th>Fecha</th><th></th></tr></thead><tbody>
-            {cotizaciones.map((item) => (
+          <table><thead><tr><th>ID</th><th>Titulo</th><th>Cliente</th><th>Obra</th><th>Items</th><th>Estado</th><th>Precio venta</th><th>Fecha</th><th></th></tr></thead><tbody>
+            {cotizacionesFiltradas.map((item) => (
               <tr key={item.id}>
                 <td>{item.id}</td>
                 <td>{item.titulo}</td>
                 <td>{item.cliente || "-"}</td>
                 <td>{item.obra || "-"}</td>
                 <td>{item._count?.items ?? "-"}</td>
+                <td><StatusBadge estado={item.estado} /></td>
                 <td>{formatMoney(item.total_usd, "USD")} +IVA</td>
                 <td>{formatDate(item.creada_en)}</td>
                 <td className="rowActions">
@@ -1126,7 +1207,7 @@ export function CotizacionesTab({
                 </td>
               </tr>
             ))}
-            {!cotizaciones.length && <tr><td colSpan={8}>Sin cotizaciones guardadas</td></tr>}
+            {!cotizacionesFiltradas.length && <tr><td colSpan={9}>Sin cotizaciones guardadas</td></tr>}
           </tbody></table>
         </div>
       </section>

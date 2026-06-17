@@ -37,3 +37,7 @@ export const cotizacionCreateSchema = z.object({
 });
 
 export const cotizacionUpdateSchema = cotizacionCreateSchema;
+
+export const cotizacionStatusSchema = z.object({
+  estado: z.enum(["PENDIENTE", "APROBADA", "RECHAZADA"]),
+});

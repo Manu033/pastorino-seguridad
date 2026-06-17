@@ -259,8 +259,17 @@ function App() {
           priceToUsd={cotizaciones.priceToUsd}
           cotizacionItems={cotizaciones.cotizacionItems}
           cotizaciones={cotizaciones.cotizaciones}
+          cotizacionesFiltradas={cotizaciones.cotizacionesFiltradas}
+          estadoFiltro={cotizaciones.estadoFiltro}
+          setEstadoFiltro={cotizaciones.setEstadoFiltro}
+          searchQuery={cotizaciones.searchQuery}
+          setSearchQuery={cotizaciones.setSearchQuery}
           loadCotizaciones={cotizaciones.loadCotizaciones}
           openCotizacion={cotizaciones.openCotizacion}
+          clearCotizacionDraft={cotizaciones.clearCotizacionDraft}
+          cotizacionEditId={cotizaciones.cotizacionEditId}
+          cotizacionWizardOpen={cotizaciones.cotizacionWizardOpen}
+          setCotizacionWizardOpen={cotizaciones.setCotizacionWizardOpen}
           printCotizacionById={cotizaciones.printCotizacionById}
         />
       )}
@@ -333,7 +342,9 @@ function App() {
         printCotizacion={cotizaciones.printCotizacion}
         cancelCotizacionEdit={cotizaciones.cancelCotizacionEdit}
         saveCotizacionEdit={cotizaciones.saveCotizacionEdit}
-        startCotizacionEdit={cotizaciones.startCotizacionEdit}
+        startCotizacionEdit={cotizaciones.editCotizacionInWizard}
+        onUpdateStatus={cotizaciones.updateCotizacionStatus}
+        updatingStatus={cotizaciones.updatingStatus}
       />
     </main>
   );
