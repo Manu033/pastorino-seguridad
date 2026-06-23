@@ -4,6 +4,7 @@ import express from "express";
 import { prisma } from "./db/prisma.js";
 import { errorHandler } from "./http.js";
 import { categoriasRouter } from "./routes/categorias.js";
+import { clientesRouter } from "./routes/clientes.js";
 import { cotizacionesRouter } from "./routes/cotizaciones.js";
 import { historialPreciosRouter } from "./routes/historialPrecios.js";
 import { importacionesRouter } from "./routes/importaciones.js";
@@ -22,6 +23,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+app.use("/clientes", clientesRouter);
 app.use("/proveedores", proveedoresRouter);
 app.use("/categorias", categoriasRouter);
 app.use("/subcategorias", subcategoriasRouter);

@@ -9,8 +9,8 @@ export function Field({ label, children }) {
   );
 }
 
-export function TextInput({ value, onChange, type = "text", placeholder = "" }) {
-  return <input type={type} value={value ?? ""} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />;
+export function TextInput({ value, onChange, type = "text", placeholder = "", autoFocus = false }) {
+  return <input type={type} value={value ?? ""} placeholder={placeholder} autoFocus={autoFocus} onChange={(event) => onChange(event.target.value)} />;
 }
 
 export function Select({ value, onChange, children }) {

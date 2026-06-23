@@ -14,7 +14,7 @@ export function useCategorias({ apiUrl, run, loadBaseData }) {
       const id = editingCategoria;
       await request(apiUrl, id ? `/categorias/${id}` : "/categorias", {
         method: id ? "PUT" : "POST",
-        body: JSON.stringify({ nombre: categoriaForm.nombre }),
+        body: JSON.stringify({ nombre: categoriaForm.nombre, tipos: categoriaForm.tipos }),
       });
       setCategoriaForm(emptyCategoria);
       setEditingCategoria(null);

@@ -10,6 +10,8 @@ export function CompuestoModal({
   compuestoItems,
   compuestoItemForm,
   setCompuestoItemForm,
+  categorias,
+  subcategoriasCompuesto,
   saveCompuesto,
   addItemToCompuesto,
   removeItemFromCompuesto,
@@ -57,6 +59,24 @@ export function CompuestoModal({
                 onChange={(nombre) => setCompuestoForm({ ...compuestoForm, nombre })}
                 placeholder="Ej: Kit extintor tipo A"
               />
+            </Field>
+            <Field label="Categoria">
+              <Select
+                value={compuestoForm.id_categoria || ""}
+                onChange={(id_categoria) => setCompuestoForm({ ...compuestoForm, id_categoria, id_subcategoria: "" })}
+              >
+                <option value="">Sin categoria</option>
+                {categorias.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
+              </Select>
+            </Field>
+            <Field label="Subcategoria">
+              <Select
+                value={compuestoForm.id_subcategoria || ""}
+                onChange={(id_subcategoria) => setCompuestoForm({ ...compuestoForm, id_subcategoria })}
+              >
+                <option value="">Sin subcategoria</option>
+                {subcategoriasCompuesto.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}
+              </Select>
             </Field>
             <Field label="Descripcion (opcional)">
               <TextInput

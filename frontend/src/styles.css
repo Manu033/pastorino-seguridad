@@ -1511,3 +1511,51 @@ pre {
     grid-template-columns: 1fr;
   }
 }
+
+/* Cliente autocomplete */
+.clienteAutocompleteList {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  left: 0;
+  list-style: none;
+  margin: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 200;
+}
+
+.clienteAutocompleteItem {
+  align-items: baseline;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.clienteAutocompleteItem:hover {
+  background: #f1f5f9;
+}
+
+.clienteAutocompleteName {
+  color: #1e293b;
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.clienteAutocompleteCuit {
+  color: #94a3b8;
+  font-size: 12px;
+  white-space: nowrap;
+}

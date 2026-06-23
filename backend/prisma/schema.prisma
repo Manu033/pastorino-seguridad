@@ -54,10 +54,12 @@ model Proveedor {
 }
 
 model Categoria {
-  id            Int            @id @default(autoincrement())
-  nombre        String         @unique @db.VarChar(120)
-  subcategorias Subcategoria[]
-  productos_proveedor ProductoProveedor[]
+  id                   Int                  @id @default(autoincrement())
+  nombre               String               @unique @db.VarChar(120)
+  tipos                TipoCotizacion[]
+  subcategorias        Subcategoria[]
+  productos_proveedor  ProductoProveedor[]
+  productos_compuestos ProductoCompuesto[]
 
   @@map("categorias")
 }
@@ -68,6 +70,7 @@ model Subcategoria {
   nombre              String              @db.VarChar(120)
   categoria           Categoria           @relation(fields: [id_categoria], references: [id])
   productos_proveedor ProductoProveedor[]
+  productos_compuestos ProductoCompuesto[]
 
   @@unique([id_categoria, nombre], name: "uq_subcategorias_categoria_nombre")
   @@index([id_categoria])
@@ -117,6 +120,7 @@ model Cotizacion {
   cuit_cliente               String?          @db.VarChar(80)
   email_cliente              String?          @db.VarChar(255)
   obra                       String?          @db.VarChar(180)
+  telefono_obra              String?          @db.VarChar(80)
   fecha_emision              DateTime?
   validez_dias               Int?             @default(30)
   moneda_base                Moneda           @default(USD)
@@ -173,12 +177,18 @@ model HistorialPrecio {
 }
 
 model ProductoCompuesto {
-  id          Int                     @id @default(autoincrement())
-  nombre      String                  @unique @db.VarChar(255)
-  descripcion String?
-  activo      Boolean                 @default(true)
-  items       ProductoCompuestoItem[]
+  id              Int                     @id @default(autoincrement())
+  id_categoria    Int?
+  id_subcategoria Int?
+  nombre          String                  @unique @db.VarChar(255)
+  descripcion     String?
+  activo          Boolean                 @default(true)
+  categoria       Categoria?              @relation(fields: [id_categoria], references: [id])
+  subcategoria    Subcategoria?           @relation(fields: [id_subcategoria], references: [id])
+  items           ProductoCompuestoItem[]
 
+  @@index([id_categoria])
+  @@index([id_subcategoria])
   @@map("productos_compuestos")
 }
 

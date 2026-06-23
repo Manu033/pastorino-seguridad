@@ -90,6 +90,7 @@ function App() {
     apiUrl: app.apiUrl,
     run: app.run,
     setError: app.setError,
+    subcategorias: baseData.subcategorias,
     loadProductosBusqueda: busqueda.loadProductosBusqueda,
   });
 
@@ -188,6 +189,7 @@ function App() {
           compuestoItems={compuestos.compuestoItems}
           compuestoItemForm={compuestos.compuestoItemForm}
           setCompuestoItemForm={compuestos.setCompuestoItemForm}
+          subcategoriasCompuesto={compuestos.subcategoriasCompuesto}
           compuestoModalOpen={compuestos.compuestoModalOpen}
           editingCompuesto={compuestos.editingCompuesto}
           saveCompuesto={compuestos.saveCompuesto}
@@ -271,6 +273,7 @@ function App() {
           cotizacionWizardOpen={cotizaciones.cotizacionWizardOpen}
           setCotizacionWizardOpen={cotizaciones.setCotizacionWizardOpen}
           printCotizacionById={cotizaciones.printCotizacionById}
+          apiUrl={app.apiUrl}
         />
       )}
 

@@ -20,6 +20,7 @@ export const cotizacionCreateSchema = z.object({
   cuit_cliente: optionalText(80),
   email_cliente: optionalText(255),
   obra: optionalText(180),
+  telefono_obra: optionalText(80),
   fecha_emision: z.coerce.date().optional().nullable(),
   validez_dias: z.coerce.number().int().positive().optional().nullable(),
   moneda_base: monedaSchema.default("USD"),

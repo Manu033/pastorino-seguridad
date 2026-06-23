@@ -76,9 +76,14 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
   const productosCotizacion = useMemo(() => {
     const buscar = normalizeSearch(cotizacionProducto.buscar);
     return productosBusqueda.filter((item) => {
-      // Composite products: only filter by text search, ignore proveedor/categoria/tipo filters
+      // Composite products do not belong to a provider, but they can be filtered by category.
       if (item._tipo === "COMPUESTO") {
         if (item.activo === false) return false;
+        const coincideCategoria =
+          !cotizacionProducto.idCategoria || String(item.id_categoria) === String(cotizacionProducto.idCategoria);
+        const coincideSubcategoria =
+          !cotizacionProducto.idSubcategoria || String(item.id_subcategoria) === String(cotizacionProducto.idSubcategoria);
+        if (!coincideCategoria || !coincideSubcategoria) return false;
         if (!buscar) return true;
         return normalizeSearch(item.nombre || "").includes(buscar);
       }

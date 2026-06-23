@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeDollarSign,
   BriefcaseBusiness,
@@ -32,6 +32,7 @@ type CotizacionForm = {
   cuit_cliente?: string;
   email_cliente?: string;
   obra: string;
+  telefono_obra?: string;
   fecha_emision?: string;
   validez_dias?: string;
   moneda_base?: Moneda;
@@ -70,7 +71,7 @@ type Producto = {
 };
 
 type Proveedor = { id: number; nombre: string; tipos: TipoCotizacion[] };
-type Categoria = { id: number; nombre: string };
+type Categoria = { id: number; nombre: string; tipos?: TipoCotizacion[] };
 type Subcategoria = { id: number; id_categoria: number; nombre: string };
 type EstadoCotizacion = "PENDIENTE" | "APROBADA" | "RECHAZADA";
 
@@ -111,6 +112,7 @@ type Props = {
   cotizacionWizardOpen: boolean;
   setCotizacionWizardOpen: React.Dispatch<React.SetStateAction<boolean>>;
   printCotizacionById: (id: number) => void;
+  apiUrl: string;
 };
 
 const steps = ["Datos generales", "Items y precios", "Vista previa"];
@@ -190,14 +192,100 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
   );
 }
 
+type Cliente = { nombre: string; cuit: string; _norm: string };
+
+const CLIENTES_STORAGE_KEY = "clientes_cache";
+const CLIENTES_STORAGE_TTL = 30 * 60 * 1000;
+
+function normalizeStr(s: string) {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "");
+}
+
+function loadClientesFromStorage(): Cliente[] | null {
+  try {
+    const raw = sessionStorage.getItem(CLIENTES_STORAGE_KEY);
+    if (!raw) return null;
+    const { data, at } = JSON.parse(raw);
+    if (Date.now() - at > CLIENTES_STORAGE_TTL) return null;
+    return data;
+  } catch { return null; }
+}
+
+function saveClientesToStorage(data: Cliente[]) {
+  try { sessionStorage.setItem(CLIENTES_STORAGE_KEY, JSON.stringify({ data, at: Date.now() })); }
+  catch { /* quota exceeded */ }
+}
+
+function ClienteAutocomplete({
+  value,
+  clientes,
+  onSelect,
+  onChange,
+  error,
+}: {
+  value: string;
+  clientes: Cliente[];
+  onSelect: (c: Cliente) => void;
+  onChange: (v: string) => void;
+  error?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const filtered = useMemo(() => {
+    const q = normalizeStr(value.trim());
+    if (!q || q.length < 2) return [];
+    return clientes.filter((c) => c._norm.includes(q) || c.cuit.includes(q)).slice(0, 10);
+  }, [value, clientes]);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <input
+        className={fieldBase(Boolean(error))}
+        value={value}
+        placeholder="Ej: Constructora Aldana S.A."
+        autoComplete="off"
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+      />
+      {open && filtered.length > 0 && (
+        <ul className="clienteAutocompleteList">
+          {filtered.map((c, i) => (
+            <li key={i}>
+              <button
+                type="button"
+                className="clienteAutocompleteItem"
+                onMouseDown={() => { onSelect(c); setOpen(false); }}
+              >
+                <span className="clienteAutocompleteName">{c.nombre}</span>
+                {c.cuit && <span className="clienteAutocompleteCuit">{c.cuit}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Step1Form({
   form,
   setForm,
   errors,
+  clientes,
 }: {
   form: CotizacionForm;
   setForm: React.Dispatch<React.SetStateAction<CotizacionForm>>;
   errors: Record<string, string>;
+  clientes: Cliente[];
 }) {
   const update = (field: keyof CotizacionForm, value: string | boolean) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -253,13 +341,22 @@ function Step1Form({
       <DarkPanel title="Cliente" icon={<BriefcaseBusiness size={15} />}>
         <div className="quoteFormGrid">
           <LabeledInput label="Nombre / Razon social" required error={errors.cliente}>
-            <input className={fieldBase(Boolean(errors.cliente))} value={form.cliente || ""} placeholder="Ej: Constructora Aldana S.A." onChange={(event) => update("cliente", event.target.value)} />
+            <ClienteAutocomplete
+              value={form.cliente || ""}
+              clientes={clientes}
+              error={errors.cliente}
+              onChange={(v) => update("cliente", v)}
+              onSelect={(c) => setForm((f) => ({ ...f, cliente: c.nombre, cuit_cliente: c.cuit }))}
+            />
           </LabeledInput>
           <LabeledInput label="Atencion a (contacto)">
             <input className={fieldBase()} value={form.contacto_cliente || ""} placeholder="Ej: Ing. Martinez" onChange={(event) => update("contacto_cliente", event.target.value)} />
           </LabeledInput>
           <LabeledInput label="CUIT / NIT">
             <input className={fieldBase()} value={form.cuit_cliente || ""} placeholder="30-12345678-9" onChange={(event) => update("cuit_cliente", event.target.value)} />
+          </LabeledInput>
+          <LabeledInput label="Telefono de obra">
+              <input className={fieldBase()} type="tel" value={form.telefono_obra || ""} placeholder="Ej: +54 11 1234-5678" onChange={(event) => update("telefono_obra", event.target.value)} />
           </LabeledInput>
           <LabeledInput label="Email">
             <input className={fieldBase()} type="email" value={form.email_cliente || ""} placeholder="contacto@empresa.com" onChange={(event) => update("email_cliente", event.target.value)} />
@@ -486,11 +583,11 @@ function Step2Items({
         </div>
         <div className="quoteStepBody">
         <div className="quoteItemTabs">
-          {[
+          {([
             ["productos", "Productos", PackageSearch],
             ["manual", "Item manual", ClipboardList],
             ["mano", "Mano de obra", Hammer],
-          ].map(([id, label, Icon]) => (
+          ] as [string, string, React.ElementType][]).map(([id, label, Icon]) => (
             <button key={id as string} type="button" className={`quoteItemTab ${activeTab === id ? "active" : ""}`} onClick={() => setActiveTab(id as any)}>
               {typeof Icon !== "string" && <Icon size={16} />}
               {label}
@@ -506,12 +603,11 @@ function Step2Items({
 
             {/* Category nav */}
             {(() => {
-              const categoriasConProductos = categorias.filter((c) =>
-                productosCotizacion.some((p) => String(p.id_categoria) === String(c.id))
+              const categoriasFiltradas = categorias.filter(
+                (cat) => !cat.tipos?.length || cat.tipos.includes(form.tipo)
               );
               const subcategoriasDisponibles = subcategorias.filter((s) =>
-                String(s.id_categoria) === String(cotizacionProducto.idCategoria) &&
-                productosCotizacion.some((p) => String(p.id_subcategoria) === String(s.id))
+                String(s.id_categoria) === String(cotizacionProducto.idCategoria)
               );
               return (
                 <div className="quoteCategoryNav">
@@ -523,7 +619,7 @@ function Step2Items({
                     >
                       Todas
                     </button>
-                    {categoriasConProductos.map((cat) => (
+                    {categoriasFiltradas.map((cat) => (
                       <button
                         key={cat.id}
                         type="button"
@@ -1011,8 +1107,28 @@ export function CotizacionesTab({
   cotizacionWizardOpen,
   setCotizacionWizardOpen,
   printCotizacionById,
+  apiUrl,
 }: Props) {
   const [currentStep, setCurrentStep] = useState(0);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+
+  useEffect(() => {
+    if (!cotizacionWizardOpen || clientes.length > 0) return;
+    const cached = loadClientesFromStorage();
+    if (cached) { setClientes(cached); return; }
+    fetch(`${apiUrl}/clientes`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!Array.isArray(data)) return;
+        const normalized = data.map((c: { nombre: string; cuit: string }) => ({
+          ...c,
+          _norm: normalizeStr(c.nombre),
+        }));
+        setClientes(normalized);
+        saveClientesToStorage(normalized);
+      })
+      .catch(() => {});
+  }, [cotizacionWizardOpen]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const form = {
     ...emptyCotizacionForm,
@@ -1110,7 +1226,7 @@ export function CotizacionesTab({
         <StepIndicator currentStep={currentStep} />
         {errors.items && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{errors.items}</div>}
 
-        {currentStep === 0 && <Step1Form form={form} setForm={setCotizacionForm} errors={errors} />}
+        {currentStep === 0 && <Step1Form form={form} setForm={setCotizacionForm} errors={errors} clientes={clientes} />}
         {currentStep === 1 && (
           <Step2Items
             form={form}

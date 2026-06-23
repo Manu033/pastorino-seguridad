@@ -1,7 +1,10 @@
 import { z } from "zod";
 
+const tipoCotizacionEnum = z.enum(["EXTINCION", "DETECCION", "SALA_BOMBAS"]);
+
 export const categoriaCreateSchema = z.object({
   nombre: z.string().trim().min(1).max(120),
+  tipos: z.array(tipoCotizacionEnum).optional().default([]),
 });
 
 export const categoriaUpdateSchema = categoriaCreateSchema.partial();

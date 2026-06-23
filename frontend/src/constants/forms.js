@@ -1,9 +1,9 @@
 export const API_DEFAULT = import.meta.env.VITE_API_URL || "http://127.0.0.1:8001";
 export const DOLAR_OFICIAL_URL = "https://dolarapi.com/v1/dolares/oficial";
 
-export const emptyProveedor = { nombre: "", email_contacto: "", telefono: "", tipo_fuente: "MANUAL", tipos: ["EXTINCION", "DETECCION", "SALA_BOMBAS"], activo: true };
+export const emptyProveedor = { nombre: "", email_contacto: "", telefono: "", tipo_fuente: "PDF", tipos: ["EXTINCION", "DETECCION", "SALA_BOMBAS"], activo: true };
 export const TIPO_LABELS = { DETECCION: "Deteccion", EXTINCION: "Extincion", SALA_BOMBAS: "Sala de bombas" };
-export const emptyCategoria = { nombre: "" };
+export const emptyCategoria = { nombre: "", tipos: [] };
 export const emptySubcategoria = { id_categoria: "", nombre: "" };
 export const emptyProductoProveedor = {
   id_proveedor: "",
@@ -33,6 +33,7 @@ export const emptyCotizacionForm = {
   cuit_cliente: "",
   email_cliente: "",
   obra: "",
+  telefono_obra: "",
   fecha_emision: new Date().toISOString().slice(0, 10),
   validez_dias: "30",
   moneda_base: "USD",
@@ -47,7 +48,7 @@ export const emptyCotizacionProducto = { buscar: "", idProveedor: "", idProducto
 export const emptyCotizacionManual = { descripcion: "", cantidad: "1", unidad: "", precio_unitario: "", moneda: "ARS" };
 export const emptyCotizacionManoObra = { personas: "1", dias: "1", precio_unitario: "", moneda: "ARS" };
 
-export const emptyCompuestoForm = { nombre: "", descripcion: "" };
+export const emptyCompuestoForm = { id_categoria: "", id_subcategoria: "", nombre: "", descripcion: "" };
 export const emptyCompuestoItemForm = { tipo: "PRODUCTO", idProducto: "", buscar: "", descripcion: "", cantidad: "1", unidad: "", precio_unitario: "", moneda: "USD" };
 
 export const PROMPT_EXTRACCION_PRECIOS = `Sos un asistente de extracción de datos para una empresa de seguridad contra incendios.

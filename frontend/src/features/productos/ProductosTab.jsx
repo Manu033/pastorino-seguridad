@@ -99,6 +99,7 @@ export function ProductosTab({
   compuestoItems,
   compuestoItemForm,
   setCompuestoItemForm,
+  subcategoriasCompuesto,
   compuestoModalOpen,
   saveCompuesto,
   addItemToCompuesto,
@@ -144,14 +145,15 @@ export function ProductosTab({
           <button type="button" onClick={openNuevoCompuestoModal}>+ Nuevo compuesto</button>
         </div>
         <table>
-          <thead><tr><th>Nombre</th><th>Descripcion</th><th>Items</th><th></th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Categoria</th><th>Descripcion</th><th>Items</th><th></th></tr></thead>
           <tbody>
             {compuestos.length === 0 && (
-              <tr><td colSpan={4} className="emptyHint">Sin compuestos creados aun</td></tr>
+              <tr><td colSpan={5} className="emptyHint">Sin compuestos creados aun</td></tr>
             )}
             {compuestos.map((c) => (
               <tr key={c.id}>
                 <td>{c.nombre}</td>
+                <td>{c.categoria?.nombre || "-"}</td>
                 <td>{c.descripcion || "-"}</td>
                 <td>{c.items?.length || 0} items</td>
                 <td className="rowActions">
@@ -182,6 +184,8 @@ export function ProductosTab({
         compuestoItems={compuestoItems}
         compuestoItemForm={compuestoItemForm}
         setCompuestoItemForm={setCompuestoItemForm}
+        categorias={categorias}
+        subcategoriasCompuesto={subcategoriasCompuesto}
         saveCompuesto={saveCompuesto}
         addItemToCompuesto={addItemToCompuesto}
         removeItemFromCompuesto={removeItemFromCompuesto}

@@ -1,14 +1,19 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { request } from "../../api/client.js";
 import { emptyCompuestoForm, emptyCompuestoItemForm } from "../../constants/forms.js";
 
-export function useProductosCompuestos({ apiUrl, run, setError, loadProductosBusqueda }) {
+export function useProductosCompuestos({ apiUrl, run, setError, subcategorias, loadProductosBusqueda }) {
   const [compuestos, setCompuestos] = useState([]);
   const [compuestoForm, setCompuestoForm] = useState(emptyCompuestoForm);
   const [compuestoItems, setCompuestoItems] = useState([]);
   const [compuestoItemForm, setCompuestoItemForm] = useState(emptyCompuestoItemForm);
   const [editingCompuesto, setEditingCompuesto] = useState(null);
   const [compuestoModalOpen, setCompuestoModalOpen] = useState(false);
+
+  const subcategoriasCompuesto = useMemo(
+    () => subcategorias.filter((item) => String(item.id_categoria) === String(compuestoForm.id_categoria)),
+    [subcategorias, compuestoForm.id_categoria],
+  );
 
   async function loadCompuestos() {
     const data = await request(apiUrl, "/productos-compuestos");
@@ -51,6 +56,8 @@ export function useProductosCompuestos({ apiUrl, run, setError, loadProductosBus
     await run("Compuesto guardado", async () => {
       const id = editingCompuesto;
       const payload = {
+        id_categoria: compuestoForm.id_categoria ? Number(compuestoForm.id_categoria) : null,
+        id_subcategoria: compuestoForm.id_subcategoria ? Number(compuestoForm.id_subcategoria) : null,
         nombre: compuestoForm.nombre.trim(),
         descripcion: compuestoForm.descripcion.trim() || null,
         items: compuestoItems.map(({ localId: _l, ...item }) => ({
@@ -85,7 +92,12 @@ export function useProductosCompuestos({ apiUrl, run, setError, loadProductosBus
   }
 
   function openEditCompuestoModal(compuesto) {
-    setCompuestoForm({ nombre: compuesto.nombre, descripcion: compuesto.descripcion || "" });
+    setCompuestoForm({
+      id_categoria: compuesto.id_categoria || "",
+      id_subcategoria: compuesto.id_subcategoria || "",
+      nombre: compuesto.nombre,
+      descripcion: compuesto.descripcion || "",
+    });
     setCompuestoItems(
       (compuesto.items || []).map((item) => ({
         ...item,
@@ -112,6 +124,7 @@ export function useProductosCompuestos({ apiUrl, run, setError, loadProductosBus
     compuestos,
     compuestoForm,
     setCompuestoForm,
+    subcategoriasCompuesto,
     compuestoItems,
     compuestoItemForm,
     setCompuestoItemForm,
