@@ -1,414 +1,303 @@
+import fondoPdfCotizacion from "../../assets/imagenes/fondo_pdf_cotizacion.jpg";
 import { escapeHtml, formatDate, formatMoney } from "../../utils/format.js";
 
 export function openCotizacionPdf(cotizacion) {
   if (!cotizacion) return { ok: true };
 
   const items = cotizacion.items || [];
-  const rows = items
+  const quoteNumber = `COT-${new Date(cotizacion.creada_en).getFullYear()}-${String(cotizacion.id).padStart(3, "0")}`;
+  const tipo = cotizacion.tipo === "DETECCION" ? "Deteccion" : "Extincion";
+  const fondoPdfUrl = escapeHtml(fondoPdfCotizacion);
+
+  const fechaEmision = cotizacion.fecha_emision
+    ? new Date(cotizacion.fecha_emision).toISOString().slice(0, 10)
+    : new Date(cotizacion.creada_en).toISOString().slice(0, 10);
+  const fechaValidez = (() => {
+    if (!cotizacion.validez_dias) return null;
+    const d = new Date(`${fechaEmision}T00:00:00`);
+    d.setDate(d.getDate() + Number(cotizacion.validez_dias));
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const rowWeight = (item) => Math.max(1, Math.ceil(String(item.descripcion || "").length / 72));
+  const pages = [];
+  for (let index = 0; index < items.length || pages.length === 0;) {
+    const firstPage = pages.length === 0;
+    const budget = firstPage ? 18 : 22;
+    const pageItems = [];
+    let used = 0;
+
+    while (index < items.length && used + rowWeight(items[index]) <= budget) {
+      pageItems.push(items[index]);
+      used += rowWeight(items[index]);
+      index += 1;
+    }
+
+    if (pageItems.length === 0 && index < items.length) pageItems.push(items[index++]);
+    pages.push(pageItems);
+  }
+
+  const renderRows = (pageItems) => pageItems
     .map(
-      (item, i) => `
-        <tr class="${i % 2 === 0 ? "row-even" : "row-odd"}">
-          <td class="col-tipo">${escapeHtml(item.tipo === "PRODUCTO" ? "Prod." : "Man.")}</td>
+      (item) => `
+        <tr>
           <td class="col-desc">${escapeHtml(item.descripcion)}</td>
-          <td class="col-num">${escapeHtml(Number(item.cantidad).toLocaleString("es-AR"))} ${escapeHtml(item.unidad || "")}</td>
+          <td class="col-num">${escapeHtml(Number(item.cantidad).toLocaleString("es-AR"))}</td>
+          <td>${escapeHtml(item.unidad || "-")}</td>
           <td class="col-num">${escapeHtml(formatMoney(item.precio_unitario, item.moneda))}</td>
-          <td class="col-num total-cell">${escapeHtml(formatMoney(item.total_usd, "USD"))}</td>
+          <td class="col-num strong">${escapeHtml(formatMoney(item.total_usd, "USD"))}</td>
         </tr>
       `,
     )
     .join("");
 
-  const quoteNumber = `COT-${new Date(cotizacion.creada_en).getFullYear()}-${String(cotizacion.id).padStart(3, "0")}`;
-  const tipo = cotizacion.tipo === "DETECCION" ? "Deteccion" : "Extincion";
+  const renderTable = (pageItems) => `
+    <table class="items">
+      <thead>
+        <tr>
+          <th>Detalle</th>
+          <th class="col-num">Cant.</th>
+          <th>Unidad</th>
+          <th class="col-num">Precio unitario</th>
+          <th class="col-num">Importe</th>
+        </tr>
+      </thead>
+      <tbody>${renderRows(pageItems)}</tbody>
+    </table>
+  `;
+
+  const renderTotals = () => `
+    <div class="totals-wrap">
+      <div class="totals-table">
+        <div class="t-row"><span>Costo directo de obra</span><span class="strong">${escapeHtml(formatMoney(cotizacion.costo_directo_usd, "USD"))}</span></div>
+        <div class="t-row"><span>Utilidad (${escapeHtml(String(cotizacion.porcentaje_utilidad || 0))}%)</span><span class="strong">${escapeHtml(formatMoney(cotizacion.monto_utilidad_usd, "USD"))}</span></div>
+        <div class="t-row"><span>Subtotal</span><span class="strong">${escapeHtml(formatMoney(cotizacion.subtotal_usd, "USD"))}</span></div>
+        ${cotizacion.aplica_costos_varios ? `<div class="t-row"><span>Costos varios (${escapeHtml(String(cotizacion.porcentaje_costos_varios || 0))}%)</span><span class="strong">${escapeHtml(formatMoney(cotizacion.monto_costos_varios_usd, "USD"))}</span></div>` : ""}
+        <div class="t-row t-final"><span>Precio de venta</span><span>${escapeHtml(formatMoney(cotizacion.total_usd, "USD"))} +IVA</span></div>
+      </div>
+    </div>
+  `;
+
+  const renderHeader = () => `
+    <section class="quote-head">
+      <div class="client-box">
+        <div class="line"><span class="label">Cliente:</span><span>${escapeHtml(cotizacion.cliente || "-")}</span></div>
+        <div class="line"><span class="label">C.U.I.T.:</span><span>${escapeHtml(cotizacion.cuit_cliente || "-")}</span></div>
+        <div class="line"><span class="label">Contacto:</span><span>${escapeHtml(cotizacion.contacto_cliente || "-")}</span></div>
+        <div class="line"><span class="label">Email:</span><span>${escapeHtml(cotizacion.email_cliente || "-")}</span></div>
+        <div class="line"><span class="label">Condicion:</span><span>A convenir</span></div>
+        <div class="line"><span class="label">Moneda:</span><span>${escapeHtml(cotizacion.moneda_base)}</span></div>
+      </div>
+
+      <div class="quote-box">
+        <div class="quote-title">Presupuesto</div>
+        <div class="line"><span class="label">Nro:</span><span>${escapeHtml(quoteNumber)}</span></div>
+        <div class="line"><span class="label">Fecha:</span><span>${escapeHtml(formatDate(fechaEmision))}</span></div>
+        <div class="line"><span class="label">Validez:</span><span>${escapeHtml(fechaValidez ? formatDate(fechaValidez) : "-")}</span></div>
+        <div class="line"><span class="label">Tipo:</span><span>${escapeHtml(tipo)}</span></div>
+        <div class="line"><span class="label">Dolar:</span><span>${escapeHtml(formatMoney(cotizacion.dolar_referencia, "ARS"))}</span></div>
+      </div>
+    </section>
+
+    <section class="project-box">
+      <div class="project-title">${escapeHtml(cotizacion.titulo || "Cotizacion sin titulo")}</div>
+      <div><span class="label">Obra / Proyecto:</span> ${escapeHtml(cotizacion.obra || "-")}</div>
+      <div><span class="label">Plazo entrega:</span> ${escapeHtml(cotizacion.plazo_entrega || "Segun disponibilidad y avance de obra")}</div>
+    </section>
+
+    ${cotizacion.observaciones ? `
+    <section class="notes-box">
+      <span class="label">Observaciones:</span> ${escapeHtml(cotizacion.observaciones)}
+    </section>` : ""}
+  `;
+
+  const renderedPages = pages
+    .map((pageItems, index) => `
+      <section class="sheet">
+        <img class="pdf-bg" src="${fondoPdfUrl}" alt="" />
+        <main class="page">
+          ${index === 0 ? renderHeader() : ""}
+          ${renderTable(pageItems)}
+          ${index === pages.length - 1 ? renderTotals() : ""}
+        </main>
+      </section>
+    `)
+    .join("");
 
   const html = `
     <!doctype html>
     <html lang="es">
       <head>
         <meta charset="UTF-8" />
-        <title>${escapeHtml(quoteNumber)} — Pastorino Seguridad</title>
+        <title>${escapeHtml(quoteNumber)} - Pastorino Seguridad</title>
         <style>
+          @page { size: A4; margin: 0; }
+
           * { box-sizing: border-box; margin: 0; padding: 0; }
 
+          html { background: #eee; }
+
           body {
-            color: #1a2332;
+            color: #111;
             font-family: Arial, Helvetica, sans-serif;
-            font-size: 11px;
-            line-height: 1.5;
-          }
-
-          /* ── HEADER ─────────────────────────────────────────────── */
-          .doc-header {
-            background: #0c4a6e;
-            color: #fff;
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            padding: 28px 36px;
-          }
-
-          .company-name {
-            font-size: 20px;
-            font-weight: 800;
-            letter-spacing: -0.3px;
-            color: #fff;
-          }
-
-          .company-sub {
             font-size: 10px;
-            color: #bae6fd;
-            margin-top: 3px;
+            line-height: 1.35;
+            margin: 0 auto;
+            width: 210mm;
           }
 
-          .doc-badge {
-            text-align: right;
-          }
-
-          .doc-badge .label {
-            font-size: 9px;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            color: #7dd3fc;
-          }
-
-          .doc-badge .number {
-            font-size: 22px;
-            font-weight: 800;
-            color: #fff;
-            line-height: 1.1;
-          }
-
-          .doc-badge .tipo-badge {
-            display: inline-block;
-            background: rgba(255,255,255,0.15);
-            border-radius: 4px;
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            padding: 2px 8px;
-            margin-top: 6px;
-            text-transform: uppercase;
-          }
-
-          /* ── META BAR ────────────────────────────────────────────── */
-          .meta-bar {
-            background: #f0f7ff;
-            border-bottom: 2px solid #0c4a6e;
-            display: flex;
-            gap: 0;
-            padding: 0;
-          }
-
-          .meta-cell {
-            border-right: 1px solid #d1e4f0;
-            flex: 1;
-            padding: 10px 16px;
-          }
-
-          .meta-cell:last-child { border-right: none; }
-
-          .meta-cell .key {
-            color: #5c7a8a;
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-          }
-
-          .meta-cell .val {
-            color: #1a2332;
-            font-size: 11px;
-            font-weight: 600;
-            margin-top: 2px;
-          }
-
-          /* ── BODY ────────────────────────────────────────────────── */
-          .doc-body {
-            padding: 24px 36px;
-          }
-
-          /* ── PARTIES ─────────────────────────────────────────────── */
-          .parties {
-            display: grid;
-            gap: 16px;
-            grid-template-columns: 1fr 1fr;
-            margin-bottom: 20px;
-          }
-
-          .party-block {
-            border: 1px solid #d1e4f0;
-            border-radius: 4px;
+          .sheet {
+            height: 297mm;
             overflow: hidden;
+            page-break-after: always;
+            position: relative;
+            width: 210mm;
           }
 
-          .party-block .block-title {
-            background: #0c4a6e;
-            color: #fff;
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 1.5px;
-            padding: 5px 12px;
+          .sheet:last-child { page-break-after: auto; }
+
+          .pdf-bg {
+            height: 297mm;
+            left: 0;
+            position: absolute;
+            top: 0;
+            width: 210mm;
+            z-index: 0;
+          }
+
+          .page {
+            padding: 38mm 13mm 32mm;
+            position: relative;
+            z-index: 1;
+          }
+
+          .quote-head {
+            align-items: flex-start;
+            display: flex;
+            justify-content: space-between;
+            gap: 10mm;
+            margin-bottom: 4mm;
+          }
+
+          .client-box,
+          .quote-box,
+          .project-box,
+          .notes-box,
+          .totals-table {
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid #222;
+            border-radius: 3px;
+          }
+
+          .client-box {
+            flex: 1;
+            padding: 2mm 3mm;
+          }
+
+          .quote-box {
+            min-width: 62mm;
+            padding: 3mm;
+          }
+
+          .quote-title {
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: 0.3px;
+            margin-bottom: 2mm;
+            text-align: center;
             text-transform: uppercase;
           }
 
-          .party-block table {
-            width: 100%;
-            border-collapse: collapse;
+          .line {
+            display: grid;
+            gap: 2mm;
+            grid-template-columns: 25mm 1fr;
+            margin: 0.7mm 0;
           }
 
-          .party-block td {
-            border: none;
-            font-size: 11px;
-            padding: 4px 12px;
+          .label { font-weight: 800; text-transform: uppercase; }
+          .strong { font-weight: 800; }
+
+          .project-box,
+          .notes-box {
+            margin-bottom: 3mm;
+            padding: 2mm 3mm;
           }
 
-          .party-block td:first-child {
-            color: #5c7a8a;
-            font-weight: 700;
-            width: 90px;
-          }
-
-          /* ── PROJECT BAND ────────────────────────────────────────── */
-          .project-band {
-            background: #f0f7ff;
-            border: 1px solid #d1e4f0;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            padding: 10px 14px;
-          }
-
-          .project-band .proj-title {
+          .project-title {
             font-size: 13px;
             font-weight: 800;
-            color: #0c4a6e;
-          }
-
-          .project-band .proj-sub {
-            color: #5c7a8a;
-            font-size: 10px;
-            margin-top: 2px;
-          }
-
-          /* ── OBSERVATIONS ────────────────────────────────────────── */
-          .obs-block {
-            background: #fffbeb;
-            border: 1px solid #fde68a;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            padding: 10px 14px;
-          }
-
-          .obs-block .obs-title {
-            color: #92400e;
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            margin-bottom: 4px;
+            margin-bottom: 1mm;
             text-transform: uppercase;
           }
 
-          /* ── TABLE ───────────────────────────────────────────────── */
-          .section-title {
-            border-bottom: 2px solid #0c4a6e;
-            color: #0c4a6e;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
-            padding-bottom: 4px;
-            text-transform: uppercase;
-          }
-
-          table.items {
+          table {
             border-collapse: collapse;
             width: 100%;
           }
 
-          table.items thead tr {
-            background: #0c4a6e;
+          .items {
+            background: rgba(255, 255, 255, 0.64);
+            border: 1px solid #222;
+            margin-top: 3mm;
           }
 
-          table.items th {
-            color: #fff;
+          .items th {
+            border-bottom: 1px solid #222;
             font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 0.8px;
-            padding: 7px 10px;
+            font-weight: 800;
+            padding: 1.6mm 1.8mm;
             text-align: left;
-            text-transform: uppercase;
           }
 
-          table.items th.col-num { text-align: right; }
-
-          table.items td {
-            border-bottom: 1px solid #e8f0f7;
-            font-size: 11px;
-            padding: 7px 10px;
+          .items td {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.18);
+            padding: 1.7mm 1.8mm;
             vertical-align: top;
           }
 
-          table.items .col-tipo { color: #5c7a8a; font-size: 10px; width: 44px; }
-          table.items .col-num  { text-align: right; white-space: nowrap; }
-          table.items .total-cell { color: #0c4a6e; font-weight: 700; }
+          .items .col-desc { font-weight: 700; }
+          .items .col-num { text-align: right; white-space: nowrap; }
 
-          .row-even { background: #fff; }
-          .row-odd  { background: #f7fbff; }
-
-          /* ── TOTALS ──────────────────────────────────────────────── */
           .totals-wrap {
             display: flex;
             justify-content: flex-end;
-            margin-top: 20px;
+            margin-top: 4mm;
           }
 
           .totals-table {
-            border: 1px solid #d1e4f0;
-            border-radius: 4px;
             overflow: hidden;
-            width: 320px;
+            width: 72mm;
           }
 
-          .totals-table .t-row {
-            border-bottom: 1px solid #e8f0f7;
+          .t-row {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.18);
             display: flex;
             justify-content: space-between;
-            padding: 7px 14px;
+            padding: 1.8mm 3mm;
           }
 
-          .totals-table .t-row:last-child { border-bottom: none; }
-
-          .totals-table .t-label { color: #5c7a8a; font-size: 11px; }
-          .totals-table .t-val   { font-size: 11px; font-weight: 700; text-align: right; }
-
-          .totals-table .t-final {
-            background: #0c4a6e;
-            color: #fff;
-          }
-
-          .totals-table .t-final .t-label { color: #bae6fd; font-size: 11px; font-weight: 700; }
-          .totals-table .t-final .t-val   { color: #fff; font-size: 15px; }
-
-          /* ── FOOTER ──────────────────────────────────────────────── */
-          .doc-footer {
-            border-top: 1px solid #d1e4f0;
-            color: #8aa0b0;
-            font-size: 9px;
-            margin-top: 32px;
-            padding-top: 10px;
-            text-align: center;
-          }
+          .t-row:last-child { border-bottom: none; }
+          .t-final { font-size: 12px; font-weight: 800; }
 
           @media print {
-            body { font-size: 10px; }
-            .doc-header { padding: 20px 28px; }
-            .doc-body { padding: 18px 28px; }
-          }
+            @page { size: A4; margin: 0; }
 
-          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            html { background: transparent; }
+            body {
+              -webkit-print-color-adjust: exact;
+              margin: 0;
+              print-color-adjust: exact;
+              width: 210mm;
+            }
+
+            .sheet { break-after: page; }
+            .sheet:last-child { break-after: auto; }
+          }
         </style>
       </head>
       <body>
-
-        <!-- HEADER -->
-        <div class="doc-header">
-          <div>
-            <div class="company-name">Pastorino Seguridad</div>
-            <div class="company-sub">Instalaciones de seguridad contra incendios</div>
-          </div>
-          <div class="doc-badge">
-            <div class="label">Cotizacion tecnica</div>
-            <div class="number">${escapeHtml(quoteNumber)}</div>
-            <div class="tipo-badge">${escapeHtml(tipo)}</div>
-          </div>
-        </div>
-
-        <!-- META BAR -->
-        <div class="meta-bar">
-          <div class="meta-cell">
-            <div class="key">Fecha de emision</div>
-            <div class="val">${escapeHtml(formatDate(cotizacion.creada_en))}</div>
-          </div>
-          <div class="meta-cell">
-            <div class="key">Valida hasta</div>
-            <div class="val">${escapeHtml(cotizacion.valida_hasta ? formatDate(cotizacion.valida_hasta) : "-")}</div>
-          </div>
-          <div class="meta-cell">
-            <div class="key">Dolar referencia</div>
-            <div class="val">${escapeHtml(formatMoney(cotizacion.dolar_referencia, "ARS"))}</div>
-          </div>
-          <div class="meta-cell">
-            <div class="key">Items</div>
-            <div class="val">${escapeHtml(String(items.length))}</div>
-          </div>
-        </div>
-
-        <div class="doc-body">
-
-          <!-- PARTIES -->
-          <div class="parties">
-            <div class="party-block">
-              <div class="block-title">Ofertante</div>
-              <table>
-                <tr><td>Empresa</td><td>Pastorino Seguridad</td></tr>
-                <tr><td>Condicion pago</td><td>A convenir</td></tr>
-                <tr><td>Plazo entrega</td><td>Segun disponibilidad y avance de obra</td></tr>
-              </table>
-            </div>
-            <div class="party-block">
-              <div class="block-title">Cliente</div>
-              <table>
-                <tr><td>Razon social</td><td>${escapeHtml(cotizacion.cliente || "-")}</td></tr>
-                <tr><td>Atencion a</td><td>${escapeHtml(cotizacion.contacto_cliente || "-")}</td></tr>
-                <tr><td>CUIT</td><td>${escapeHtml(cotizacion.cuit_cliente || "-")}</td></tr>
-                <tr><td>Email</td><td>${escapeHtml(cotizacion.email_cliente || "-")}</td></tr>
-              </table>
-            </div>
-          </div>
-
-          <!-- PROJECT -->
-          <div class="project-band">
-            <div class="proj-title">${escapeHtml(cotizacion.titulo || "Cotizacion sin titulo")}</div>
-            <div class="proj-sub">Obra / Proyecto: ${escapeHtml(cotizacion.obra || "-")}</div>
-          </div>
-
-          ${cotizacion.observaciones ? `
-          <div class="obs-block">
-            <div class="obs-title">Observaciones</div>
-            <div>${escapeHtml(cotizacion.observaciones)}</div>
-          </div>` : ""}
-
-          <!-- ITEMS TABLE -->
-          <div class="section-title">Detalle de items</div>
-          <table class="items">
-            <thead>
-              <tr>
-                <th>Tipo</th>
-                <th>Descripcion</th>
-                <th class="col-num">Cantidad</th>
-                <th class="col-num">Precio unit.</th>
-                <th class="col-num">Total USD</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-
-          <!-- TOTALS -->
-          <div class="totals-wrap">
-            <div class="totals-table">
-              <div class="t-row"><span class="t-label">Costo directo de obra</span><span class="t-val">${escapeHtml(formatMoney(cotizacion.costo_directo_usd, "USD"))}</span></div>
-              <div class="t-row"><span class="t-label">Utilidad (${escapeHtml(String(cotizacion.porcentaje_utilidad || 0))}%)</span><span class="t-val">${escapeHtml(formatMoney(cotizacion.monto_utilidad_usd, "USD"))}</span></div>
-              <div class="t-row"><span class="t-label">Subtotal</span><span class="t-val">${escapeHtml(formatMoney(cotizacion.subtotal_usd, "USD"))}</span></div>
-              ${cotizacion.aplica_costos_varios ? `<div class="t-row"><span class="t-label">Costos varios (${escapeHtml(String(cotizacion.porcentaje_costos_varios || 0))}%)</span><span class="t-val">${escapeHtml(formatMoney(cotizacion.monto_costos_varios_usd, "USD"))}</span></div>` : ""}
-              <div class="t-row t-final"><span class="t-label">Precio de venta</span><span class="t-val">${escapeHtml(formatMoney(cotizacion.total_usd, "USD"))} +IVA</span></div>
-            </div>
-          </div>
-
-          <!-- FOOTER -->
-          <div class="doc-footer">
-            Pastorino Seguridad — Cotizacion ${escapeHtml(quoteNumber)} — Precios en USD, IVA no incluido. Documento generado el ${escapeHtml(formatDate(new Date().toISOString()))}.
-          </div>
-
-        </div>
+        ${renderedPages}
 
         <script>
           window.addEventListener("load", () => { window.print(); });
