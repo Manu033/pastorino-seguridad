@@ -22,6 +22,7 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
   const [cotizacionItems, setCotizacionItems] = useState([]);
   const [cotizacionDropdownOpen, setCotizacionDropdownOpen] = useState(false);
   const [cotizaciones, setCotizaciones] = useState([]);
+  const [accesoriosAutomaticos, setAccesoriosAutomaticos] = useState([]);
   const [cotizacionSeleccionada, setCotizacionSeleccionada] = useState(null);
   const [cotizacionEdit, setCotizacionEdit] = useState(null);
   const [cotizacionEditando, setCotizacionEditando] = useState(false);
@@ -119,6 +120,16 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
     return value / dolarVenta;
   }
 
+  function accessoryQuantity(formula, meters, separacionMaxima) {
+    if (formula === "PERA") {
+      const separacion = toNumber(separacionMaxima);
+      if (separacion <= 0) return null;
+      return Math.ceil(meters / separacion) + 1;
+    }
+    if (formula === "SOPORTE") return Math.ceil(meters / 3.5);
+    return Math.ceil(meters / 6.4);
+  }
+
   function itemTotalUsd(cantidad, precioUnitario, moneda, dolarReferencia = dolarVenta) {
     const cantidadNumber = toNumber(cantidad);
     const precioNumber = toNumber(precioUnitario);
@@ -164,6 +175,9 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
       precio_unitario: Number(item.precio_unitario),
       moneda: item.moneda || "USD",
       total_usd: Number(item.total_usd),
+      metros_requeridos: item.metros_requeridos == null ? null : Number(item.metros_requeridos),
+      generado_automaticamente: Boolean(item.generado_automaticamente),
+      formula_automatica: item.formula_automatica || null,
     }));
   }
 
@@ -177,6 +191,12 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
   async function loadCotizaciones() {
     await run("Cotizaciones actualizadas", async () => {
       setCotizaciones(await request(apiUrl, "/cotizaciones"));
+    });
+  }
+
+  async function loadAccesoriosAutomaticos() {
+    await run("Accesorios automaticos actualizados", async () => {
+      setAccesoriosAutomaticos(await request(apiUrl, "/productos-accesorios-automaticos"));
     });
   }
 
@@ -209,10 +229,13 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
       productoCotizacionSeleccionado.moneda_actual,
     );
     const detalleCompra = describirCompraProducto(productoCotizacionSeleccionado, cantidadRequerida);
-    setCotizacionItems((items) => [
-      ...items,
+    const metrosCotizados = normalizeSearch(productoCotizacionSeleccionado.unidad) === "tubo"
+      ? compra.cantidadCompra * compra.equivalencia
+      : cantidadRequerida;
+    const localId = crypto.randomUUID();
+    const nuevosItems = [
       {
-        localId: crypto.randomUUID(),
+        localId,
         id_producto_proveedor: productoCotizacionSeleccionado.id,
         tipo: "PRODUCTO",
         descripcion: [
@@ -226,8 +249,40 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
         precio_unitario: toNumber(productoCotizacionSeleccionado.precio_actual),
         moneda: productoCotizacionSeleccionado.moneda_actual,
         total_usd: compra.cantidadCompra * unitUsd,
+        metros_requeridos: normalizeSearch(productoCotizacionSeleccionado.unidad) === "tubo" ? cantidadRequerida : null,
       },
-    ]);
+    ];
+
+    if (normalizeSearch(productoCotizacionSeleccionado.unidad) === "tubo") {
+      const configs = accesoriosAutomaticos.filter(
+        (config) => config.activo && String(config.id_producto_tubo) === String(productoCotizacionSeleccionado.id),
+      );
+      for (const config of configs) {
+        const accesorio = config.producto_accesorio;
+        if (!accesorio) return setError("Hay un accesorio automatico sin producto configurado");
+        if (!accesorio.precio_actual || !accesorio.moneda_actual) return setError(`El accesorio ${accesorio.nombre_producto_proveedor} no tiene precio actual`);
+        if (accesorio.moneda_actual === "ARS" && !dolarVenta) return setError("No hay cotizacion de dolar disponible para convertir pesos a USD");
+        const cantidadAccesorio = accessoryQuantity(config.formula, metrosCotizados, config.separacion_maxima_m);
+        if (!cantidadAccesorio || cantidadAccesorio <= 0) return setError(config.formula === "PERA" ? "La formula PERA requiere una separacion maxima mayor a cero" : `No se pudo calcular ${config.formula}`);
+        const precioAccesorio = toNumber(accesorio.precio_actual);
+        nuevosItems.push({
+          localId: crypto.randomUUID(),
+          id_producto_proveedor: accesorio.id,
+          tipo: "PRODUCTO",
+          descripcion: `${accesorio.sku_producto_proveedor} - ${accesorio.nombre_producto_proveedor} | Automatico ${config.formula} para ${metrosCotizados.toLocaleString("es-AR")} m cotizados`,
+          cantidad: cantidadAccesorio,
+          unidad: accesorio.unidad || "",
+          precio_unitario: precioAccesorio,
+          moneda: accesorio.moneda_actual,
+          total_usd: cantidadAccesorio * priceToUsd(precioAccesorio, accesorio.moneda_actual),
+          generado_automaticamente: true,
+          formula_automatica: config.formula,
+          accesorio_origen_local_id: localId,
+        });
+      }
+    }
+
+    setCotizacionItems((items) => [...items, ...nuevosItems]);
     setCotizacionProducto(emptyCotizacionProducto);
     setCotizacionDropdownOpen(false);
     setError("");
@@ -376,6 +431,9 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
           precio_unitario: Number(item.precio_unitario),
           total_usd: Number(item.total_usd),
           unidad: item.unidad || "",
+          metros_requeridos: item.metros_requeridos == null ? null : Number(item.metros_requeridos),
+          generado_automaticamente: Boolean(item.generado_automaticamente),
+          formula_automatica: item.formula_automatica || null,
         })),
       });
       setCotizacionEditando(false);
@@ -401,7 +459,7 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
       porcentaje_utilidad: cotizacionSeleccionada.porcentaje_utilidad ?? "0",
       aplica_costos_varios: Boolean(cotizacionSeleccionada.aplica_costos_varios),
       porcentaje_costos_varios: cotizacionSeleccionada.porcentaje_costos_varios ?? "0",
-      items: (cotizacionSeleccionada.items || []).map((item) => ({
+        items: (cotizacionSeleccionada.items || []).map((item) => ({
         ...item,
         localId: crypto.randomUUID(),
         id_producto_proveedor: item.id_producto_proveedor || null,
@@ -409,6 +467,9 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
         precio_unitario: Number(item.precio_unitario),
         total_usd: Number(item.total_usd),
         unidad: item.unidad || "",
+        metros_requeridos: item.metros_requeridos == null ? null : Number(item.metros_requeridos),
+        generado_automaticamente: Boolean(item.generado_automaticamente),
+        formula_automatica: item.formula_automatica || null,
       })),
     });
     setCotizacionEditando(true);
@@ -475,6 +536,9 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
             precio_unitario: toNumber(item.precio_unitario),
             moneda: item.moneda,
             total_usd: toNumber(item.total_usd),
+            metros_requeridos: toNumberOrNull(item.metros_requeridos),
+            generado_automaticamente: Boolean(item.generado_automaticamente),
+            formula_automatica: item.formula_automatica || null,
           }),
         ),
       };
@@ -501,6 +565,9 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
           precio_unitario: Number(item.precio_unitario),
           total_usd: Number(item.total_usd),
           unidad: item.unidad || "",
+          metros_requeridos: item.metros_requeridos == null ? null : Number(item.metros_requeridos),
+          generado_automaticamente: Boolean(item.generado_automaticamente),
+          formula_automatica: item.formula_automatica || null,
         })),
       });
       await loadCotizaciones();
@@ -551,6 +618,7 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
     cotizacionDropdownOpen,
     setCotizacionDropdownOpen,
     cotizaciones,
+    accesoriosAutomaticos,
     cotizacionSeleccionada,
     cotizacionEdit,
     setCotizacionEdit,
@@ -565,6 +633,7 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
     priceToUsd,
     itemTotalUsd,
     loadCotizaciones,
+    loadAccesoriosAutomaticos,
     addProductoCotizacion,
     addManualCotizacion,
     addManoObraCotizacion,

@@ -5,6 +5,22 @@ import { cotizacionCreateSchema, cotizacionStatusSchema, cotizacionUpdateSchema 
 
 export const cotizacionesRouter = Router();
 
+function cotizacionItemCreateData(item: any) {
+  return {
+    id_producto_proveedor: item.id_producto_proveedor,
+    tipo: item.tipo,
+    descripcion: item.descripcion,
+    cantidad: item.cantidad,
+    unidad: item.unidad,
+    precio_unitario: item.precio_unitario,
+    moneda: item.moneda,
+    total_usd: item.total_usd,
+    metros_requeridos: item.metros_requeridos,
+    generado_automaticamente: item.generado_automaticamente,
+    formula_automatica: item.formula_automatica,
+  } as any;
+}
+
 cotizacionesRouter.get(
   "",
   asyncHandler(async (_req, res) => {
@@ -43,16 +59,7 @@ cotizacionesRouter.post(
         monto_costos_varios_usd: data.monto_costos_varios_usd,
         total_usd: data.total_usd,
         items: {
-          create: data.items.map((item) => ({
-            id_producto_proveedor: item.id_producto_proveedor,
-            tipo: item.tipo,
-            descripcion: item.descripcion,
-            cantidad: item.cantidad,
-            unidad: item.unidad,
-            precio_unitario: item.precio_unitario,
-            moneda: item.moneda,
-            total_usd: item.total_usd,
-          })),
+          create: data.items.map(cotizacionItemCreateData),
         },
       },
       include: {
@@ -144,16 +151,7 @@ cotizacionesRouter.put(
           monto_costos_varios_usd: data.monto_costos_varios_usd,
           total_usd: data.total_usd,
           items: {
-            create: data.items.map((item) => ({
-              id_producto_proveedor: item.id_producto_proveedor,
-              tipo: item.tipo,
-              descripcion: item.descripcion,
-              cantidad: item.cantidad,
-              unidad: item.unidad,
-              precio_unitario: item.precio_unitario,
-              moneda: item.moneda,
-              total_usd: item.total_usd,
-            })),
+            create: data.items.map(cotizacionItemCreateData),
           },
         },
         include: {

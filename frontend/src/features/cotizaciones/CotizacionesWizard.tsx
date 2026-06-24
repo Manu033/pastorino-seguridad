@@ -23,6 +23,7 @@ import { formatDate, formatMoney, toNumber } from "../../utils/format.js";
 type Moneda = "USD" | "ARS";
 type TipoCotizacion = "EXTINCION" | "DETECCION" | "SALA_BOMBAS";
 type ItemGrupo = "MATERIAL" | "MANO_OBRA";
+type FormulaAccesorioAutomatico = "PERA" | "SOPORTE" | "ACOPLE";
 
 type CotizacionForm = {
   tipo: TipoCotizacion;
@@ -55,6 +56,10 @@ type CotizacionItem = {
   precio_unitario: number;
   moneda: Moneda;
   total_usd: number;
+  metros_requeridos?: number | null;
+  generado_automaticamente?: boolean;
+  formula_automatica?: FormulaAccesorioAutomatico | null;
+  accesorio_origen_local_id?: string;
 };
 
 type Producto = {
@@ -65,9 +70,20 @@ type Producto = {
   sku_producto_proveedor: string;
   nombre_producto_proveedor: string;
   unidad?: string | null;
+  cantidad_por_unidad_compra?: string | number | null;
   precio_actual?: string | number | null;
   moneda_actual?: Moneda | null;
   proveedor?: { id: number; nombre: string; tipos: TipoCotizacion[] };
+};
+
+type AccesorioAutomatico = {
+  id: number;
+  id_producto_tubo: number;
+  id_producto_accesorio: number;
+  formula: FormulaAccesorioAutomatico;
+  separacion_maxima_m?: string | number | null;
+  activo: boolean;
+  producto_accesorio?: Producto;
 };
 
 type Proveedor = { id: number; nombre: string; tipos: TipoCotizacion[] };
@@ -98,6 +114,7 @@ type Props = {
   categorias: Categoria[];
   subcategorias: Subcategoria[];
   productosCotizacion: Producto[];
+  accesoriosAutomaticos: AccesorioAutomatico[];
   cotizacionItems: CotizacionItem[];
   cotizaciones: CotizacionGuardada[];
   cotizacionesFiltradas: CotizacionGuardada[];
@@ -198,7 +215,25 @@ const CLIENTES_STORAGE_KEY = "clientes_cache";
 const CLIENTES_STORAGE_TTL = 30 * 60 * 1000;
 
 function normalizeStr(s: string) {
-  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "");
+  return s.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "");
+}
+
+function isTubeProduct(product?: Producto | null) {
+  return normalizeStr(String(product?.unidad || "")) === "tubo";
+}
+
+function productOptionId(product: Producto) {
+  return `${(product as any)._tipo || "PRODUCTO"}:${product.id}`;
+}
+
+function accessoryQuantity(formula: FormulaAccesorioAutomatico, meters: number, separacionMaxima?: number | null) {
+  if (formula === "PERA") {
+    const separacion = toNumber(separacionMaxima);
+    if (separacion <= 0) return null;
+    return Math.ceil(meters / separacion) + 1;
+  }
+  if (formula === "SOPORTE") return Math.ceil(meters / 3.5);
+  return Math.ceil(meters / 6.4);
 }
 
 function loadClientesFromStorage(): Cliente[] | null {
@@ -415,6 +450,7 @@ function Step2Items({
   categorias,
   subcategorias,
   productosCotizacion,
+  accesoriosAutomaticos,
   cotizacionProducto,
   setCotizacionProducto,
   items,
@@ -428,6 +464,7 @@ function Step2Items({
   categorias: Categoria[];
   subcategorias: Subcategoria[];
   productosCotizacion: Producto[];
+  accesoriosAutomaticos: AccesorioAutomatico[];
   cotizacionProducto: { idProveedor?: string; buscar?: string; idCategoria?: string; idSubcategoria?: string };
   setCotizacionProducto: React.Dispatch<React.SetStateAction<any>>;
   items: CotizacionItem[];
@@ -442,11 +479,61 @@ function Step2Items({
   const [manoForm, setManoForm] = useState({ descripcion: "Mano de obra", personas: "1", dias: "1", precio_unitario: "", moneda: "USD" as Moneda });
 
   const visibleProductosCotizacion = (productosCotizacion as any[]).slice(0, 50);
-  const selectedProduct = productosCotizacion.find((item) => String(item.id) === String(productoForm.idProducto));
+  const selectedProduct = productosCotizacion.find((item) => productOptionId(item) === productoForm.idProducto);
+  const selectedIsTube = isTubeProduct(selectedProduct);
 
   function pushItem(item: CotizacionItem) {
     setItems((current) => [...current, item]);
     setError("");
+  }
+
+  function automaticAccessoriesFor(tubeItems: CotizacionItem[]) {
+    const generated: CotizacionItem[] = [];
+    for (const tube of tubeItems) {
+      const meters = toNumber(tube.metros_requeridos);
+      if (!tube.id_producto_proveedor || meters <= 0 || normalizeStr(tube.unidad) !== "tubo") continue;
+      const configs = accesoriosAutomaticos.filter((config) => config.activo && String(config.id_producto_tubo) === String(tube.id_producto_proveedor));
+      for (const config of configs) {
+        const accessory = config.producto_accesorio;
+        if (!accessory) return { error: "Hay un accesorio automatico sin producto configurado", items: [] };
+        const accessoryPrice = toNumber(accessory.precio_actual);
+        const accessoryCurrency = accessory.moneda_actual || "USD";
+        if (!accessoryPrice || !accessory.moneda_actual) return { error: `El accesorio ${accessory.nombre_producto_proveedor} no tiene precio actual`, items: [] };
+        if (accessoryCurrency === "ARS" && !dolarVenta) return { error: "No hay cotizacion de dolar disponible para convertir ARS", items: [] };
+        const accessoryQty = accessoryQuantity(config.formula, meters, toNumber(config.separacion_maxima_m));
+        if (!accessoryQty || accessoryQty <= 0) return { error: config.formula === "PERA" ? "La formula PERA requiere una separacion maxima mayor a cero" : `No se pudo calcular ${config.formula}`, items: [] };
+        generated.push({
+          localId: crypto.randomUUID(),
+          id_producto_proveedor: accessory.id,
+          tipo: "PRODUCTO",
+          grupo: "MATERIAL",
+          descripcion: `${accessory.sku_producto_proveedor} - ${accessory.nombre_producto_proveedor} | Automatico ${config.formula} para ${numberFormat(meters)} m de tubo`,
+          cantidad: accessoryQty,
+          unidad: accessory.unidad || "",
+          precio_unitario: accessoryPrice,
+          moneda: accessoryCurrency,
+          total_usd: toUsd(accessoryQty * accessoryPrice, accessoryCurrency, dolarVenta),
+          generado_automaticamente: true,
+          formula_automatica: config.formula,
+          accesorio_origen_local_id: tube.localId,
+        });
+      }
+    }
+    return { error: "", items: generated };
+  }
+
+  function removeItem(item: CotizacionItem) {
+    if (item.generado_automaticamente) {
+      setItems((current) => current.filter((row) => row.localId !== item.localId));
+      return;
+    }
+    setItems((current) => {
+      const manualItems = current.filter((row) => row.localId !== item.localId && !row.generado_automaticamente);
+      const { error: nextError, items: generatedItems } = automaticAccessoriesFor(manualItems);
+      if (nextError) setError(nextError);
+      else setError("");
+      return [...manualItems, ...generatedItems];
+    });
   }
 
   function addProducto() {
@@ -512,19 +599,60 @@ function Step2Items({
     const moneda = (productoForm.moneda || selectedProduct.moneda_actual || "USD") as Moneda;
     if (precio < 0) return setError("Precio unitario invalido");
     if (moneda === "ARS" && !dolarVenta) return setError("No hay cotizacion de dolar disponible para convertir ARS");
+    const metrosRequeridos = selectedIsTube ? cantidad : null;
+    const longitudTubo = toNumber(selectedProduct.cantidad_por_unidad_compra);
+    const cantidadCotizada = selectedIsTube ? Math.ceil(cantidad / longitudTubo) : cantidad;
+    if (selectedIsTube && longitudTubo <= 0) return setError("El tubo no tiene longitud comercial configurada");
+    const metrosCotizados = selectedIsTube ? cantidadCotizada * longitudTubo : cantidad;
 
-    pushItem({
-      localId: crypto.randomUUID(),
+    const localId = crypto.randomUUID();
+    const newItems: CotizacionItem[] = [{
+      localId,
       id_producto_proveedor: selectedProduct.id,
       tipo: "PRODUCTO",
       grupo: "MATERIAL",
-      descripcion: `${selectedProduct.sku_producto_proveedor} - ${selectedProduct.nombre_producto_proveedor}`,
-      cantidad,
+      descripcion: selectedIsTube
+        ? `${selectedProduct.sku_producto_proveedor} - ${selectedProduct.nombre_producto_proveedor} | ${numberFormat(cantidad)} m requeridos (${numberFormat(longitudTubo)} m por tubo)`
+        : `${selectedProduct.sku_producto_proveedor} - ${selectedProduct.nombre_producto_proveedor}`,
+      cantidad: cantidadCotizada,
       unidad: selectedProduct.unidad || "",
       precio_unitario: precio,
       moneda,
-      total_usd: toUsd(cantidad * precio, moneda, dolarVenta),
-    });
+      total_usd: toUsd(cantidadCotizada * precio, moneda, dolarVenta),
+      metros_requeridos: metrosRequeridos,
+    }];
+
+    if (selectedIsTube) {
+      const configs = accesoriosAutomaticos.filter((config) => config.activo && String(config.id_producto_tubo) === String(selectedProduct.id));
+      for (const config of configs) {
+        const accessory = config.producto_accesorio;
+        if (!accessory) return setError("Hay un accesorio automatico sin producto configurado");
+        const accessoryPrice = toNumber(accessory.precio_actual);
+        const accessoryCurrency = accessory.moneda_actual || "USD";
+        if (!accessoryPrice || !accessory.moneda_actual) return setError(`El accesorio ${accessory.nombre_producto_proveedor} no tiene precio actual`);
+        if (accessoryCurrency === "ARS" && !dolarVenta) return setError("No hay cotizacion de dolar disponible para convertir ARS");
+        const accessoryQty = accessoryQuantity(config.formula, metrosCotizados, toNumber(config.separacion_maxima_m));
+        if (!accessoryQty || accessoryQty <= 0) return setError(config.formula === "PERA" ? "La formula PERA requiere una separacion maxima mayor a cero" : `No se pudo calcular ${config.formula}`);
+        newItems.push({
+          localId: crypto.randomUUID(),
+          id_producto_proveedor: accessory.id,
+          tipo: "PRODUCTO",
+          grupo: "MATERIAL",
+          descripcion: `${accessory.sku_producto_proveedor} - ${accessory.nombre_producto_proveedor} | Automatico ${config.formula} para ${numberFormat(metrosCotizados)} m cotizados`,
+          cantidad: accessoryQty,
+          unidad: accessory.unidad || "",
+          precio_unitario: accessoryPrice,
+          moneda: accessoryCurrency,
+          total_usd: toUsd(accessoryQty * accessoryPrice, accessoryCurrency, dolarVenta),
+          generado_automaticamente: true,
+          formula_automatica: config.formula,
+          accesorio_origen_local_id: localId,
+        });
+      }
+    }
+
+    setItems((current) => [...current, ...newItems]);
+    setError("");
     setProductoForm({ idProducto: "", cantidad: "1", precio_unitario: "", moneda: "USD" });
     setCotizacionProducto((current: any) => ({ ...current, buscar: "" }));
   }
@@ -660,8 +788,9 @@ function Step2Items({
               <LabeledInput label="Buscar en categoria">
                 <input className={fieldBase()} value={cotizacionProducto.buscar || ""} placeholder="SKU, nombre o proveedor..." onChange={(event) => setCotizacionProducto((current: any) => ({ ...current, buscar: event.target.value }))} />
               </LabeledInput>
-              <LabeledInput label="Cantidad">
+              <LabeledInput label={selectedIsTube ? "Metros requeridos" : "Cantidad"}>
                 <input className={fieldBase()} type="number" min="0" value={productoForm.cantidad} onChange={(event) => setProductoForm((current) => ({ ...current, cantidad: event.target.value }))} />
+                {selectedIsTube && <span className="text-xs font-bold text-slate-500">Se cotiza por tubos comerciales y agrega accesorios configurados.</span>}
               </LabeledInput>
               <LabeledInput label="Precio unitario">
                 <input className={fieldBase()} type="number" min="0" value={productoForm.precio_unitario} onChange={(event) => setProductoForm((current) => ({ ...current, precio_unitario: event.target.value }))} disabled />
@@ -682,12 +811,12 @@ function Step2Items({
                 const isCompuesto = item._tipo === "COMPUESTO";
                 return (
                   <button
-                    key={item.id}
+                    key={productOptionId(item)}
                     type="button"
-                    className={`quoteProductResult ${String(productoForm.idProducto) === String(item.id) ? "selected" : ""}`}
+                    className={`quoteProductResult ${productoForm.idProducto === productOptionId(item) ? "selected" : ""}`}
                     onClick={() => {
                       setProductoForm({
-                        idProducto: String(item.id),
+                        idProducto: productOptionId(item),
                         cantidad: productoForm.cantidad,
                         precio_unitario: isCompuesto ? "" : String(item.precio_actual || ""),
                         moneda: isCompuesto ? "USD" : (item.moneda_actual || "USD"),
@@ -777,7 +906,7 @@ function Step2Items({
         )}
 
         <div className="quoteItemsTableWrap">
-          <ItemsTable items={items} setItems={setItems} monedaBase={form.moneda_base || "USD"} dolarVenta={dolarVenta} />
+        <ItemsTable items={items} removeItem={removeItem} monedaBase={form.moneda_base || "USD"} dolarVenta={dolarVenta} />
         </div>
         </div>
       </div>
@@ -798,12 +927,12 @@ type Totals = {
 
 function ItemsTable({
   items,
-  setItems,
+  removeItem,
   monedaBase,
   dolarVenta,
 }: {
   items: CotizacionItem[];
-  setItems: React.Dispatch<React.SetStateAction<CotizacionItem[]>>;
+  removeItem: (item: CotizacionItem) => void;
   monedaBase: Moneda;
   dolarVenta: number;
 }) {
@@ -833,17 +962,17 @@ function ItemsTable({
               <td>
                 <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                   {item.grupo === "MANO_OBRA" ? <Hammer size={14} /> : item.tipo === "PRODUCTO" ? <PackageSearch size={14} /> : <ClipboardList size={14} />}
-                  {item.grupo === "MANO_OBRA" ? "Mano de obra" : item.tipo === "PRODUCTO" ? "Producto" : "Manual"}
+                  {item.generado_automaticamente ? "Automatico" : item.grupo === "MANO_OBRA" ? "Mano de obra" : item.tipo === "PRODUCTO" ? "Producto" : "Manual"}
                 </span>
               </td>
-              <td>{item.descripcion}</td>
+              <td>{item.descripcion}{item.metros_requeridos ? <div className="text-xs font-bold text-slate-500">Metros requeridos: {numberFormat(item.metros_requeridos)} m</div> : null}</td>
               <td>{numberFormat(item.cantidad)}</td>
               <td>{item.unidad || "-"}</td>
               <td>{formatMoney(item.precio_unitario, item.moneda)}</td>
               <td>{item.moneda}</td>
               <td>{formatBase(item.total_usd, monedaBase, dolarVenta)}</td>
               <td className="rowActions">
-                <button type="button" className="inline-flex items-center gap-1 !rounded-lg !bg-red-50 !px-3 !py-2 !text-red-700 hover:!bg-red-100" onClick={() => setItems((current) => current.filter((row) => row.localId !== item.localId))}><Trash2 size={14} />Eliminar</button>
+                <button type="button" className="inline-flex items-center gap-1 !rounded-lg !bg-red-50 !px-3 !py-2 !text-red-700 hover:!bg-red-100" onClick={() => removeItem(item)}><Trash2 size={14} />Eliminar</button>
               </td>
             </tr>
           ))}
@@ -1093,6 +1222,7 @@ export function CotizacionesTab({
   categorias,
   subcategorias,
   productosCotizacion,
+  accesoriosAutomaticos,
   cotizacionItems,
   cotizaciones,
   cotizacionesFiltradas,
@@ -1235,6 +1365,7 @@ export function CotizacionesTab({
             categorias={categorias}
             subcategorias={subcategorias}
             productosCotizacion={productosCotizacion}
+            accesoriosAutomaticos={accesoriosAutomaticos}
             cotizacionProducto={cotizacionProducto}
             setCotizacionProducto={setCotizacionProducto}
             items={cotizacionItems}

@@ -106,6 +106,7 @@ function App() {
     productos.loadProductosProveedor();
     busqueda.loadProductosBusqueda();
     cotizaciones.loadCotizaciones();
+    cotizaciones.loadAccesoriosAutomaticos();
     compuestos.loadCompuestos();
     health.checkHealth(app.apiUrl, app.run);
     health.loadDolarOficial();
@@ -249,6 +250,7 @@ function App() {
           categorias={baseData.categorias}
           subcategorias={baseData.subcategorias}
           productosCotizacion={cotizaciones.productosCotizacion}
+          accesoriosAutomaticos={cotizaciones.accesoriosAutomaticos}
           cotizacionDropdownOpen={cotizaciones.cotizacionDropdownOpen}
           productoCotizacionSeleccionado={cotizaciones.productoCotizacionSeleccionado}
           calcularCompraProducto={calcularCompraProducto}

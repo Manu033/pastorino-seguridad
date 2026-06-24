@@ -23,7 +23,7 @@ export function openCotizacionPdf(cotizacion) {
   const pages = [];
   for (let index = 0; index < items.length || pages.length === 0;) {
     const firstPage = pages.length === 0;
-    const budget = firstPage ? 18 : 22;
+    const budget = firstPage ? 20 : 30;
     const pageItems = [];
     let used = 0;
 

@@ -28,3 +28,13 @@ export const bulkCategorizarSchema = z.object({
   id_categoria: z.number().int().positive().nullable(),
   id_subcategoria: z.number().int().positive().nullable(),
 });
+
+export const productoAccesorioAutomaticoSchema = z.object({
+  id_producto_tubo: z.number().int().positive(),
+  id_producto_accesorio: z.number().int().positive(),
+  formula: z.enum(["PERA", "SOPORTE", "ACOPLE"]),
+  separacion_maxima_m: z.coerce.number().positive().optional().nullable(),
+  activo: z.boolean().default(true),
+});
+
+export const productoAccesorioAutomaticoUpdateSchema = productoAccesorioAutomaticoSchema.partial();

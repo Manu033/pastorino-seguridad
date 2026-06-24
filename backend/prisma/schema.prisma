@@ -40,6 +40,12 @@ enum EstadoCotizacion {
   RECHAZADA
 }
 
+enum FormulaAccesorioAutomatico {
+  PERA
+  SOPORTE
+  ACOPLE
+}
+
 model Proveedor {
   id                  Int                 @id @default(autoincrement())
   nombre              String              @unique @db.VarChar(150)
@@ -102,6 +108,8 @@ model ProductoProveedor {
   historial_precios          HistorialPrecio[]
   cotizacion_items           CotizacionItem[]
   compuesto_items            ProductoCompuestoItem[]
+  accesorios_automaticos_tubo ProductoAccesorioAutomatico[] @relation("ProductoTuboAccesorioAutomatico")
+  accesorios_automaticos      ProductoAccesorioAutomatico[] @relation("ProductoAccesorioAutomatico")
 
   @@unique([id_proveedor, sku_producto_proveedor], name: "uq_productos_proveedor_proveedor_sku")
   @@index([id_proveedor])
@@ -155,12 +163,31 @@ model CotizacionItem {
   precio_unitario       Decimal            @db.Decimal(14, 4)
   moneda                Moneda
   total_usd             Decimal            @db.Decimal(14, 4)
+  metros_requeridos     Decimal?           @db.Decimal(14, 4)
+  generado_automaticamente Boolean          @default(false)
+  formula_automatica    FormulaAccesorioAutomatico?
   cotizacion            Cotizacion         @relation(fields: [id_cotizacion], references: [id], onDelete: Cascade)
   producto_proveedor    ProductoProveedor? @relation(fields: [id_producto_proveedor], references: [id], onDelete: SetNull)
 
   @@index([id_cotizacion])
   @@index([id_producto_proveedor])
   @@map("cotizacion_items")
+}
+
+model ProductoAccesorioAutomatico {
+  id                    Int                         @id @default(autoincrement())
+  id_producto_tubo      Int
+  id_producto_accesorio Int
+  formula               FormulaAccesorioAutomatico
+  separacion_maxima_m   Decimal?                    @db.Decimal(14, 4)
+  activo                Boolean                     @default(true)
+  producto_tubo         ProductoProveedor           @relation("ProductoTuboAccesorioAutomatico", fields: [id_producto_tubo], references: [id], onDelete: Cascade)
+  producto_accesorio    ProductoProveedor           @relation("ProductoAccesorioAutomatico", fields: [id_producto_accesorio], references: [id], onDelete: Cascade)
+
+  @@unique([id_producto_tubo, id_producto_accesorio, formula], name: "uq_productos_accesorios_automaticos")
+  @@index([id_producto_tubo])
+  @@index([id_producto_accesorio])
+  @@map("productos_accesorios_automaticos")
 }
 
 model HistorialPrecio {

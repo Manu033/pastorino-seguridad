@@ -10,6 +10,9 @@ const cotizacionItemSchema = z.object({
   precio_unitario: z.coerce.number().nonnegative(),
   moneda: monedaSchema,
   total_usd: z.coerce.number().nonnegative(),
+  metros_requeridos: z.coerce.number().positive().optional().nullable(),
+  generado_automaticamente: z.coerce.boolean().default(false),
+  formula_automatica: z.enum(["PERA", "SOPORTE", "ACOPLE"]).optional().nullable(),
 });
 
 export const cotizacionCreateSchema = z.object({
