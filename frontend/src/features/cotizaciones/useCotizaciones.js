@@ -228,8 +228,9 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
       productoCotizacionSeleccionado.precio_actual,
       productoCotizacionSeleccionado.moneda_actual,
     );
+    const isTube = normalizeSearch(productoCotizacionSeleccionado.unidad) === "tubo";
     const detalleCompra = describirCompraProducto(productoCotizacionSeleccionado, cantidadRequerida);
-    const metrosCotizados = normalizeSearch(productoCotizacionSeleccionado.unidad) === "tubo"
+    const metrosCotizados = isTube
       ? compra.cantidadCompra * compra.equivalencia
       : cantidadRequerida;
     const localId = crypto.randomUUID();
@@ -241,19 +242,20 @@ export function useCotizaciones({ apiUrl, run, setError, dolarVenta, productosBu
         descripcion: [
           `${productoCotizacionSeleccionado.sku_producto_proveedor} - ${productoCotizacionSeleccionado.nombre_producto_proveedor}`,
           detalleCompra,
+          isTube ? `Precio calculado sobre ${metrosCotizados.toLocaleString("es-AR")} m cotizados` : null,
         ]
           .filter(Boolean)
           .join(" | "),
-        cantidad: compra.cantidadCompra,
-        unidad: productoCotizacionSeleccionado.unidad || "",
+        cantidad: isTube ? metrosCotizados : compra.cantidadCompra,
+        unidad: isTube ? "mts" : productoCotizacionSeleccionado.unidad || "",
         precio_unitario: toNumber(productoCotizacionSeleccionado.precio_actual),
         moneda: productoCotizacionSeleccionado.moneda_actual,
-        total_usd: compra.cantidadCompra * unitUsd,
-        metros_requeridos: normalizeSearch(productoCotizacionSeleccionado.unidad) === "tubo" ? cantidadRequerida : null,
+        total_usd: (isTube ? metrosCotizados : compra.cantidadCompra) * unitUsd,
+        metros_requeridos: isTube ? cantidadRequerida : null,
       },
     ];
 
-    if (normalizeSearch(productoCotizacionSeleccionado.unidad) === "tubo") {
+    if (isTube) {
       const configs = accesoriosAutomaticos.filter(
         (config) => config.activo && String(config.id_producto_tubo) === String(productoCotizacionSeleccionado.id),
       );

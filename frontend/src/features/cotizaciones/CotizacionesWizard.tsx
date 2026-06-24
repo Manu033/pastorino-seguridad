@@ -236,6 +236,103 @@ function accessoryQuantity(formula: FormulaAccesorioAutomatico, meters: number, 
   return Math.ceil(meters / 6.4);
 }
 
+function createQuoteItem(input: Omit<CotizacionItem, "localId"> & { localId?: string }) {
+  return {
+    ...input,
+    localId: input.localId || crypto.randomUUID(),
+  };
+}
+
+function buildAutomaticAccessoryItems({
+  tubeProduct,
+  accesoriosAutomaticos,
+  meters,
+  dolarVenta,
+  originId,
+}: {
+  tubeProduct: Producto;
+  accesoriosAutomaticos: AccesorioAutomatico[];
+  meters: number;
+  dolarVenta: number;
+  originId: string;
+}) {
+  const items: CotizacionItem[] = [];
+  const configs = accesoriosAutomaticos.filter((config) => config.activo && String(config.id_producto_tubo) === String(tubeProduct.id));
+
+  for (const config of configs) {
+    const accessory = config.producto_accesorio;
+    if (!accessory) return { error: "Hay un accesorio automatico sin producto configurado", items: [] };
+    const accessoryPrice = toNumber(accessory.precio_actual);
+    const accessoryCurrency = accessory.moneda_actual || "USD";
+    if (!accessoryPrice || !accessory.moneda_actual) return { error: `El accesorio ${accessory.nombre_producto_proveedor} no tiene precio actual`, items: [] };
+    if (accessoryCurrency === "ARS" && !dolarVenta) return { error: "No hay cotizacion de dolar disponible para convertir ARS", items: [] };
+    const accessoryQty = accessoryQuantity(config.formula, meters, toNumber(config.separacion_maxima_m));
+    if (!accessoryQty || accessoryQty <= 0) return { error: config.formula === "PERA" ? "La formula PERA requiere una separacion maxima mayor a cero" : `No se pudo calcular ${config.formula}`, items: [] };
+
+    items.push(createQuoteItem({
+      id_producto_proveedor: accessory.id,
+      tipo: "PRODUCTO",
+      grupo: "MATERIAL",
+      descripcion: `${accessory.nombre_producto_proveedor} | Automatico ${config.formula} para ${numberFormat(meters)} m cotizados`,
+      cantidad: accessoryQty,
+      unidad: accessory.unidad || "",
+      precio_unitario: accessoryPrice,
+      moneda: accessoryCurrency,
+      total_usd: toUsd(accessoryQty * accessoryPrice, accessoryCurrency, dolarVenta),
+      generado_automaticamente: true,
+      formula_automatica: config.formula,
+      accesorio_origen_local_id: originId,
+    }));
+  }
+
+  return { error: "", items };
+}
+
+function buildCompositeItems(product: any, cantidad: number, dolarVenta: number) {
+  const compItems: any[] = product.items || [];
+  const items: CotizacionItem[] = [];
+  if (!compItems.length) return { error: "El compuesto no tiene items configurados", items };
+
+  for (const ci of compItems) {
+    const cantidadFinal = toNumber(ci.cantidad) * cantidad;
+    if (ci.tipo === "PRODUCTO" && ci.producto_proveedor) {
+      const prod = ci.producto_proveedor;
+      const precio = toNumber(prod.precio_actual);
+      const moneda = (prod.moneda_actual || "USD") as Moneda;
+      if (!precio) continue;
+      if (moneda === "ARS" && !dolarVenta) return { error: "No hay cotizacion de dolar disponible para convertir ARS", items: [] };
+      items.push(createQuoteItem({
+        id_producto_proveedor: prod.id,
+        tipo: "PRODUCTO",
+        grupo: "MATERIAL",
+        descripcion: prod.nombre_producto_proveedor,
+        cantidad: cantidadFinal,
+        unidad: ci.unidad || prod.unidad || "",
+        precio_unitario: precio,
+        moneda,
+        total_usd: toUsd(cantidadFinal * precio, moneda, dolarVenta),
+      }));
+    } else if (ci.tipo === "MANUAL") {
+      const precio = toNumber(ci.precio_unitario);
+      const moneda = (ci.moneda || "USD") as Moneda;
+      if (moneda === "ARS" && !dolarVenta) return { error: "No hay cotizacion de dolar disponible para convertir ARS", items: [] };
+      items.push(createQuoteItem({
+        id_producto_proveedor: null,
+        tipo: "MANUAL",
+        grupo: "MATERIAL",
+        descripcion: ci.descripcion,
+        cantidad: cantidadFinal,
+        unidad: ci.unidad || "",
+        precio_unitario: precio,
+        moneda,
+        total_usd: toUsd(cantidadFinal * precio, moneda, dolarVenta),
+      }));
+    }
+  }
+
+  return { error: items.length ? "" : "No se pudieron agregar items del compuesto (verifique que tengan precio)", items };
+}
+
 function loadClientesFromStorage(): Cliente[] | null {
   try {
     const raw = sessionStorage.getItem(CLIENTES_STORAGE_KEY);
@@ -488,53 +585,9 @@ function Step2Items({
     setError("");
   }
 
-  function automaticAccessoriesFor(tubeItems: CotizacionItem[]) {
-    const generated: CotizacionItem[] = [];
-    for (const tube of tubeItems) {
-      const meters = toNumber(tube.metros_requeridos);
-      if (!tube.id_producto_proveedor || meters <= 0 || normalizeStr(tube.unidad) !== "tubo") continue;
-      const configs = accesoriosAutomaticos.filter((config) => config.activo && String(config.id_producto_tubo) === String(tube.id_producto_proveedor));
-      for (const config of configs) {
-        const accessory = config.producto_accesorio;
-        if (!accessory) return { error: "Hay un accesorio automatico sin producto configurado", items: [] };
-        const accessoryPrice = toNumber(accessory.precio_actual);
-        const accessoryCurrency = accessory.moneda_actual || "USD";
-        if (!accessoryPrice || !accessory.moneda_actual) return { error: `El accesorio ${accessory.nombre_producto_proveedor} no tiene precio actual`, items: [] };
-        if (accessoryCurrency === "ARS" && !dolarVenta) return { error: "No hay cotizacion de dolar disponible para convertir ARS", items: [] };
-        const accessoryQty = accessoryQuantity(config.formula, meters, toNumber(config.separacion_maxima_m));
-        if (!accessoryQty || accessoryQty <= 0) return { error: config.formula === "PERA" ? "La formula PERA requiere una separacion maxima mayor a cero" : `No se pudo calcular ${config.formula}`, items: [] };
-        generated.push({
-          localId: crypto.randomUUID(),
-          id_producto_proveedor: accessory.id,
-          tipo: "PRODUCTO",
-          grupo: "MATERIAL",
-          descripcion: `${accessory.nombre_producto_proveedor} | Automatico ${config.formula} para ${numberFormat(meters)} m de tubo`,
-          cantidad: accessoryQty,
-          unidad: accessory.unidad || "",
-          precio_unitario: accessoryPrice,
-          moneda: accessoryCurrency,
-          total_usd: toUsd(accessoryQty * accessoryPrice, accessoryCurrency, dolarVenta),
-          generado_automaticamente: true,
-          formula_automatica: config.formula,
-          accesorio_origen_local_id: tube.localId,
-        });
-      }
-    }
-    return { error: "", items: generated };
-  }
-
   function removeItem(item: CotizacionItem) {
-    if (item.generado_automaticamente) {
-      setItems((current) => current.filter((row) => row.localId !== item.localId));
-      return;
-    }
-    setItems((current) => {
-      const manualItems = current.filter((row) => row.localId !== item.localId && !row.generado_automaticamente);
-      const { error: nextError, items: generatedItems } = automaticAccessoriesFor(manualItems);
-      if (nextError) setError(nextError);
-      else setError("");
-      return [...manualItems, ...generatedItems];
-    });
+    setItems((current) => current.filter((row) => row.localId !== item.localId && row.accesorio_origen_local_id !== item.localId));
+    setError("");
   }
 
   function addProducto() {
@@ -544,58 +597,16 @@ function Step2Items({
 
     const product = selectedProduct as any;
 
-    // Handle composite product — expand into individual items
     if (product._tipo === "COMPUESTO") {
-      const compItems: any[] = product.items || [];
-      if (!compItems.length) return setError("El compuesto no tiene items configurados");
-
-      const newItems: CotizacionItem[] = [];
-      for (const ci of compItems) {
-        const cantidadFinal = toNumber(ci.cantidad) * cantidad;
-        if (ci.tipo === "PRODUCTO" && ci.producto_proveedor) {
-          const prod = ci.producto_proveedor;
-          const precio = toNumber(prod.precio_actual);
-          const moneda = (prod.moneda_actual || "USD") as Moneda;
-          if (!precio) continue;
-          if (moneda === "ARS" && !dolarVenta) return setError("No hay cotizacion de dolar disponible para convertir ARS");
-          newItems.push({
-            localId: crypto.randomUUID(),
-            id_producto_proveedor: prod.id,
-            tipo: "PRODUCTO",
-            grupo: "MATERIAL",
-            descripcion: `${prod.nombre_producto_proveedor}`,
-            cantidad: cantidadFinal,
-            unidad: ci.unidad || prod.unidad || "",
-            precio_unitario: precio,
-            moneda,
-            total_usd: toUsd(cantidadFinal * precio, moneda, dolarVenta),
-          });
-        } else if (ci.tipo === "MANUAL") {
-          const precio = toNumber(ci.precio_unitario);
-          const moneda = (ci.moneda || "USD") as Moneda;
-          if (moneda === "ARS" && !dolarVenta) return setError("No hay cotizacion de dolar disponible para convertir ARS");
-          newItems.push({
-            localId: crypto.randomUUID(),
-            id_producto_proveedor: null,
-            tipo: "MANUAL",
-            grupo: "MATERIAL",
-            descripcion: ci.descripcion,
-            cantidad: cantidadFinal,
-            unidad: ci.unidad || "",
-            precio_unitario: precio,
-            moneda,
-            total_usd: toUsd(cantidadFinal * precio, moneda, dolarVenta),
-          });
-        }
-      }
-      if (!newItems.length) return setError("No se pudieron agregar items del compuesto (verifique que tengan precio)");
-      newItems.forEach(pushItem);
+      const { error: compositeError, items: newItems } = buildCompositeItems(product, cantidad, dolarVenta);
+      if (compositeError) return setError(compositeError);
+      setItems((current) => [...current, ...newItems]);
+      setError("");
       setProductoForm({ idProducto: "", cantidad: "1", precio_unitario: "", moneda: "USD" });
       setCotizacionProducto((current: any) => ({ ...current, buscar: "" }));
       return;
     }
 
-    // Regular product
     const precio = toNumber(productoForm.precio_unitario || selectedProduct.precio_actual);
     const moneda = (productoForm.moneda || selectedProduct.moneda_actual || "USD") as Moneda;
     if (precio < 0) return setError("Precio unitario invalido");
@@ -607,49 +618,32 @@ function Step2Items({
     const metrosCotizados = selectedIsTube ? cantidadCotizada * longitudTubo : cantidad;
 
     const localId = crypto.randomUUID();
-    const newItems: CotizacionItem[] = [{
+    const newItems: CotizacionItem[] = [createQuoteItem({
       localId,
       id_producto_proveedor: selectedProduct.id,
       tipo: "PRODUCTO",
       grupo: "MATERIAL",
       descripcion: selectedIsTube
-        ? `${selectedProduct.nombre_producto_proveedor} | ${numberFormat(cantidad)} m requeridos (${numberFormat(longitudTubo)} m por tubo)`
+        ? `${selectedProduct.nombre_producto_proveedor} | ${numberFormat(cantidad)} m requeridos (${numberFormat(cantidadCotizada)} tubos de ${numberFormat(longitudTubo)} m)`
         : `${selectedProduct.nombre_producto_proveedor}`,
-      cantidad: cantidadCotizada,
-      unidad: selectedProduct.unidad || "",
+      cantidad: selectedIsTube ? metrosCotizados : cantidadCotizada,
+      unidad: selectedIsTube ? "m" : selectedProduct.unidad || "",
       precio_unitario: precio,
       moneda,
-      total_usd: toUsd(cantidadCotizada * precio, moneda, dolarVenta),
+      total_usd: toUsd((selectedIsTube ? metrosCotizados : cantidadCotizada) * precio, moneda, dolarVenta),
       metros_requeridos: metrosRequeridos,
-    }];
+    })];
 
     if (selectedIsTube) {
-      const configs = accesoriosAutomaticos.filter((config) => config.activo && String(config.id_producto_tubo) === String(selectedProduct.id));
-      for (const config of configs) {
-        const accessory = config.producto_accesorio;
-        if (!accessory) return setError("Hay un accesorio automatico sin producto configurado");
-        const accessoryPrice = toNumber(accessory.precio_actual);
-        const accessoryCurrency = accessory.moneda_actual || "USD";
-        if (!accessoryPrice || !accessory.moneda_actual) return setError(`El accesorio ${accessory.nombre_producto_proveedor} no tiene precio actual`);
-        if (accessoryCurrency === "ARS" && !dolarVenta) return setError("No hay cotizacion de dolar disponible para convertir ARS");
-        const accessoryQty = accessoryQuantity(config.formula, metrosCotizados, toNumber(config.separacion_maxima_m));
-        if (!accessoryQty || accessoryQty <= 0) return setError(config.formula === "PERA" ? "La formula PERA requiere una separacion maxima mayor a cero" : `No se pudo calcular ${config.formula}`);
-        newItems.push({
-          localId: crypto.randomUUID(),
-          id_producto_proveedor: accessory.id,
-          tipo: "PRODUCTO",
-          grupo: "MATERIAL",
-          descripcion: `${accessory.nombre_producto_proveedor} | Automatico ${config.formula} para ${numberFormat(metrosCotizados)} m cotizados`,
-          cantidad: accessoryQty,
-          unidad: accessory.unidad || "",
-          precio_unitario: accessoryPrice,
-          moneda: accessoryCurrency,
-          total_usd: toUsd(accessoryQty * accessoryPrice, accessoryCurrency, dolarVenta),
-          generado_automaticamente: true,
-          formula_automatica: config.formula,
-          accesorio_origen_local_id: localId,
-        });
-      }
+      const { error: accessoryError, items: accessoryItems } = buildAutomaticAccessoryItems({
+        tubeProduct: selectedProduct,
+        accesoriosAutomaticos,
+        meters: metrosCotizados,
+        dolarVenta,
+        originId: localId,
+      });
+      if (accessoryError) return setError(accessoryError);
+      newItems.push(...accessoryItems);
     }
 
     setItems((current) => [...current, ...newItems]);
@@ -665,8 +659,7 @@ function Step2Items({
     if (cantidad <= 0 || precio < 0) return setError("Cantidad y precio unitario son requeridos");
     if (manualForm.moneda === "ARS" && !dolarVenta) return setError("No hay cotizacion de dolar disponible para convertir ARS");
 
-    pushItem({
-      localId: crypto.randomUUID(),
+    pushItem(createQuoteItem({
       id_producto_proveedor: null,
       tipo: "MANUAL",
       grupo: "MATERIAL",
@@ -676,7 +669,7 @@ function Step2Items({
       precio_unitario: precio,
       moneda: manualForm.moneda,
       total_usd: toUsd(cantidad * precio, manualForm.moneda, dolarVenta),
-    });
+    }));
     setManualForm({ descripcion: "", cantidad: "1", unidad: "gl", precio_unitario: "", moneda: "USD" });
   }
 
@@ -688,8 +681,7 @@ function Step2Items({
     if (personas <= 0 || dias <= 0 || precio < 0) return setError("Personas, dias y precio son requeridos");
     if (manoForm.moneda === "ARS" && !dolarVenta) return setError("No hay cotizacion de dolar disponible para convertir ARS");
 
-    pushItem({
-      localId: crypto.randomUUID(),
+    pushItem(createQuoteItem({
       id_producto_proveedor: null,
       tipo: "MANUAL",
       grupo: "MANO_OBRA",
@@ -699,7 +691,7 @@ function Step2Items({
       precio_unitario: precio,
       moneda: manoForm.moneda,
       total_usd: toUsd(personas * dias * precio, manoForm.moneda, dolarVenta),
-    });
+    }));
     setManoForm({ descripcion: "Mano de obra", personas: "1", dias: "1", precio_unitario: "", moneda: "USD" });
   }
 
