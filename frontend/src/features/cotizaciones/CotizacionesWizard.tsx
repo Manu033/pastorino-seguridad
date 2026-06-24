@@ -477,6 +477,7 @@ function Step2Items({
   const [productoForm, setProductoForm] = useState({ idProducto: "", cantidad: "1", precio_unitario: "", moneda: "USD" as Moneda });
   const [manualForm, setManualForm] = useState({ descripcion: "", cantidad: "1", unidad: "gl", precio_unitario: "", moneda: "USD" as Moneda });
   const [manoForm, setManoForm] = useState({ descripcion: "Mano de obra", personas: "1", dias: "1", precio_unitario: "", moneda: "USD" as Moneda });
+  const quantityInputRef = useRef<HTMLInputElement>(null);
 
   const visibleProductosCotizacion = (productosCotizacion as any[]).slice(0, 50);
   const selectedProduct = productosCotizacion.find((item) => productOptionId(item) === productoForm.idProducto);
@@ -507,7 +508,7 @@ function Step2Items({
           id_producto_proveedor: accessory.id,
           tipo: "PRODUCTO",
           grupo: "MATERIAL",
-          descripcion: `${accessory.sku_producto_proveedor} - ${accessory.nombre_producto_proveedor} | Automatico ${config.formula} para ${numberFormat(meters)} m de tubo`,
+          descripcion: `${accessory.nombre_producto_proveedor} | Automatico ${config.formula} para ${numberFormat(meters)} m de tubo`,
           cantidad: accessoryQty,
           unidad: accessory.unidad || "",
           precio_unitario: accessoryPrice,
@@ -562,7 +563,7 @@ function Step2Items({
             id_producto_proveedor: prod.id,
             tipo: "PRODUCTO",
             grupo: "MATERIAL",
-            descripcion: `${prod.sku_producto_proveedor} - ${prod.nombre_producto_proveedor}`,
+            descripcion: `${prod.nombre_producto_proveedor}`,
             cantidad: cantidadFinal,
             unidad: ci.unidad || prod.unidad || "",
             precio_unitario: precio,
@@ -612,8 +613,8 @@ function Step2Items({
       tipo: "PRODUCTO",
       grupo: "MATERIAL",
       descripcion: selectedIsTube
-        ? `${selectedProduct.sku_producto_proveedor} - ${selectedProduct.nombre_producto_proveedor} | ${numberFormat(cantidad)} m requeridos (${numberFormat(longitudTubo)} m por tubo)`
-        : `${selectedProduct.sku_producto_proveedor} - ${selectedProduct.nombre_producto_proveedor}`,
+        ? `${selectedProduct.nombre_producto_proveedor} | ${numberFormat(cantidad)} m requeridos (${numberFormat(longitudTubo)} m por tubo)`
+        : `${selectedProduct.nombre_producto_proveedor}`,
       cantidad: cantidadCotizada,
       unidad: selectedProduct.unidad || "",
       precio_unitario: precio,
@@ -638,7 +639,7 @@ function Step2Items({
           id_producto_proveedor: accessory.id,
           tipo: "PRODUCTO",
           grupo: "MATERIAL",
-          descripcion: `${accessory.sku_producto_proveedor} - ${accessory.nombre_producto_proveedor} | Automatico ${config.formula} para ${numberFormat(metrosCotizados)} m cotizados`,
+          descripcion: `${accessory.nombre_producto_proveedor} | Automatico ${config.formula} para ${numberFormat(metrosCotizados)} m cotizados`,
           cantidad: accessoryQty,
           unidad: accessory.unidad || "",
           precio_unitario: accessoryPrice,
@@ -789,7 +790,19 @@ function Step2Items({
                 <input className={fieldBase()} value={cotizacionProducto.buscar || ""} placeholder="SKU, nombre o proveedor..." onChange={(event) => setCotizacionProducto((current: any) => ({ ...current, buscar: event.target.value }))} />
               </LabeledInput>
               <LabeledInput label={selectedIsTube ? "Metros requeridos" : "Cantidad"}>
-                <input className={fieldBase()} type="number" min="0" value={productoForm.cantidad} onChange={(event) => setProductoForm((current) => ({ ...current, cantidad: event.target.value }))} />
+                <input
+                  ref={quantityInputRef}
+                  className={fieldBase()}
+                  type="number"
+                  min="0"
+                  value={productoForm.cantidad}
+                  onChange={(event) => setProductoForm((current) => ({ ...current, cantidad: event.target.value }))}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    addProducto();
+                  }}
+                />
                 {selectedIsTube && <span className="text-xs font-bold text-slate-500">Se cotiza por tubos comerciales y agrega accesorios configurados.</span>}
               </LabeledInput>
               <LabeledInput label="Precio unitario">
@@ -820,6 +833,10 @@ function Step2Items({
                         cantidad: productoForm.cantidad,
                         precio_unitario: isCompuesto ? "" : String(item.precio_actual || ""),
                         moneda: isCompuesto ? "USD" : (item.moneda_actual || "USD"),
+                      });
+                      requestAnimationFrame(() => {
+                        quantityInputRef.current?.focus();
+                        quantityInputRef.current?.select();
                       });
                     }}
                   >
